@@ -119,7 +119,7 @@ def on_modified(event):
     size = os.path.getsize(event.src_path)
 
     # Extract the frame number from the filename
-    splitStr = split_str = re.split(r'img_channel\d+_position\d+_time',
+    splitStr = re.split(r'img_channel\d+_position\d+_time',
                                     os.path.basename(event.src_path))
     splitStr = re.split(r'_z\d+', splitStr[1])
     frameNum = int(splitStr[0])
