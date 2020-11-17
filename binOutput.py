@@ -13,15 +13,11 @@ import numpy
 from datetime import datetime
 
 
-
-
-
-
 if __name__ == "__main__":
     path = "//lebnas1.epfl.ch/microsc125/Watchdog/"
     filename = 'binary_output.dat'
     fullFileDir = path + filename
-    
+
     x = False
     x = bool(x)
     i = 0
