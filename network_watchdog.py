@@ -65,6 +65,11 @@ if __name__ == "__main__":
 
     inputSize = 708
     inputSize = round(inputSize*resizeParam)
+
+    # Figure for the histogram
+    figHist = plt.figure()
+    axHist = plt.axes()
+    pltHist = axHist.plot([1, 2, 1])
     
     # Figure for the outputs
     fig = plt.figure(facecolor='black', tight_layout=True)
@@ -75,7 +80,7 @@ if __name__ == "__main__":
     lines = []
 
     ax.append(fig.add_subplot(1, 3, 1))
-    im.append(plt.imshow(data, vmax = 100, cmap='Greys_r'))  # scaling 
+    im.append(plt.imshow(data, vmax = 5, cmap='Greys_r'))  # scaling 
     
     #mito input display
     ax.append(fig.add_subplot(1, 3, 2))
@@ -116,6 +121,7 @@ def on_deleted(event):
 def on_modified(event):
     global frameNumOld, inputSizeOld
     global outputDataFull, mitoDataFull, drpDataFull
+    global outputHistogram
     size = os.path.getsize(event.src_path)
 
     # Extract the frame number from the filename
@@ -132,13 +138,21 @@ def on_modified(event):
         return
 
     # Skip file if a newer one is already in the folder
-    search_path = os.path.dirname(event.src_path) + '/*.*'
-    if max(glob.iglob(search_path), key=os.path.getmtime) == event.src_path:
+    t1 = time.perf_counter()
+    #search_path = os.path.dirname(event.src_path) + '/*.*'
+    latestFile = os.path.dirname(event.src_path) + '\\' + os.listdir(os.path.dirname(event.src_path))[-1]
+    print(latestFile)
+    print(event.src_path)
+    #if max(glob.iglob(search_path), key=os.path.getmtime) == event.src_path:
+    if  latestFile == event.src_path:
         pass
     else:
         print(int((frameNum-1)/2), ' passed because newer file is already there')
+        t2 = time.perf_counter()
+        print('folder search', int(round((t2 - t1)*1000)))
         return
-
+    t2 = time.perf_counter()
+    print('folder search', int(round((t2 - t1)*1000)))
     
 
 
@@ -173,11 +187,13 @@ def on_modified(event):
         if frameNum == 1 and not inputSize == inputSizeOld:
             inputSize = round(drpFull.shape[0]*resizeParam) if not inputSize == 128 else 128
             outputDataFull = np.zeros([inputSize, inputSize])
+            outputDataThresh = np.zeros([inputSize, inputSize])
             mitoDataFull = np.zeros([inputSize, inputSize])
             drpDataFull = np.zeros([inputSize, inputSize])
+            outputHistogram = []
                 # Figure for the outputs
             data = np.random.randint(10, size=[inputSize, inputSize])
-            im[0] = ax[0].imshow(data, vmax = 100, cmap='Greys_r')  # scaling   
+            im[0] = ax[0].imshow(data, vmax = 80, cmap='Greys_r')  # scaling   
             #mito input display
             im[1] = ax[1].imshow(data, vmax = 255, alpha=1)
             im[2] = ax[2].imshow(data, vmax = 255, cmap='hot')
@@ -219,7 +235,7 @@ def on_modified(event):
         for position in positions['px']:
             outputDataFull[position[0]+stitch:position[2]-stitch,
                            position[1]+stitch:position[3]-stitch] = \
-                           output_predict[i,stitch:stitch1,stitch:stitch1,0]
+                           output_predict[i,stitch:stitch1,stitch:stitch1,0] 
             mitoDataFull[position[0]+stitch:position[2]-stitch,
                            position[1]+stitch:position[3]-stitch] = \
                            inputData[i,stitch:stitch1,stitch:stitch1,0]
@@ -227,12 +243,32 @@ def on_modified(event):
                            position[1]+stitch:position[3]-stitch] = \
                            inputData[i,stitch:stitch1,stitch:stitch1,1]
 
-            i = i + 1    
-        output = int(round(np.max(outputDataFull)))
-        
+            i = i + 1
+
+        # OUTPUT Calculation
+        print('                   ', int(round(np.max(outputDataFull))))
+        approach = 3
+        if approach == 1:
+            mask = outputDataFull > 10
+            outputDataThresh = np.zeros_like(mask).astype(int)     
+            outputDataThresh[mask] = outputDataFull[mask]
+            output = int(round(np.sum(outputDataThresh)))
+        elif approach == 2:
+            n = 4
+            output = 0
+            for i in range(0,n):
+                output = output + np.max(outputDataFull) 
+                maxX = np.argmax(outputDataFull, axis=0)
+                maxY = np.argmax(outputDataFull, axis=1)
+                outputDataFull[maxX,maxY] = 0
+            outputDataThresh = outputDataFull
+            output = round(output)
+        elif approach == 3:
+            output = int(round(np.max(outputDataFull)))
+            outputDataThresh = outputDataFull
    
         # ***** remove this for real use
-        im[0].set_data(outputDataFull)
+        im[0].set_data(outputDataThresh)
         im[2].set_data(mitoDataFull)
         #alphas =  exposure.rescale_intensity(mitoDataFull,(filters.threshold_mean(mitoDataFull),
         #                                                np.max(mitoDataFull)), out_range=(0, 2))
@@ -242,13 +278,19 @@ def on_modified(event):
 
         # output = frameNum+1
         write_bin(output, 0)
+        if len(outputHistogram) > 200:
+            outputHistogram = outputHistogram[1:]
+        outputHistogram.append(output)
+        pltHist[0].set_data(range(0, len(outputHistogram)), outputHistogram)
+        axHist.relim()
+        axHist.autoscale_view(True,True,True)
         tend = time.perf_counter()
-
+        
         frameNumOld = frameNum
         inputSizeOld = inputSize
-        print('NN took ', round((t4-t3)*1000))
-        print('binary written in ', round((tend-t1)*1000))
-        print('output generated   ', output)
+        #print('NN took ', round((t4-t3)*1000))
+        #print('binary written in ', round((tend-t1)*1000))
+        print('output generated   ', int(output))
         
 
 def on_moved(event):

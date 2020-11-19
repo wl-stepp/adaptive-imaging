@@ -76,13 +76,13 @@ def prepareNNImages(mitoFull, drpFull, nnImageSize):
 
     inputData = inputData.astype('uint8')
     t6 = time.perf_counter()
-    print('resize__', t1-t0)
-    print('gaussian', t2-t1)
-    print('contrast', t3-t2)
+    #print('resize__', t1-t0)
+    #print('gaussian', t2-t1)
+    #print('contrast', t3-t2)
     # print('tile pre', t4-t3)
-    print('reformat', t5-t4)
-    print('tiling__', t6-t5)
-    print('full____', t6-t0)   
+    #print('reformat', t5-t4)
+    #print('tiling__', t6-t5)
+    #print('full____', t6-t0)   
     return inputData, positions
 
 
