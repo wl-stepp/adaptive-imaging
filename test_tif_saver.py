@@ -21,8 +21,8 @@ print()
 input_data_filename1 = data_path + 'Mito.h5'  # Mito
 input_data_filename2 = data_path + 'Drp1.h5'  # Drp1
 
-input_data_filename1 = data_path + 'cell_8_Pos1_mito_741.tif'  # Mito
-input_data_filename2 = data_path + 'cell_8_Pos1_drp1_741.tif'  # Drp1
+# input_data_filename1 = data_path + 'cell_8_Pos1_mito_741.tif'  # Mito
+# input_data_filename2 = data_path + 'cell_8_Pos1_drp1_741.tif'  # Drp1
 
 # input_data_filename1 = data_path + 'cell_8_mito_1024.tif'  # Mito
 # input_data_filename2 = data_path + 'cell_8_drp1_1024.tif'  # Drp1
@@ -62,7 +62,7 @@ print('Input : ', np.shape(drp)[0])
 nas_path = '//lebnas1.epfl.ch/microsc125/Watchdog/python_saver/'
 
 i = 0
-for item in range(100, 115):
+for item in range(, 230):
     # for item in range(1, 2002, 1000):  # [1, 208]:  # range(150, 210):
     t1 = time.perf_counter()
     print(item)
@@ -78,13 +78,14 @@ for item in range(100, 115):
     io.imsave(drp_path, drp[item, :, :].astype(np.uint16),
               check_contrast=False)
     t2 = time.perf_counter()
-    time.sleep(np.max([0, 2 - (t2 - t1)]))
+    time.sleep(np.max([0, .5 - (t2 - t1)]))
     i = i + 1
 
-time.sleep(10)
+time.sleep(3)
 
 # Clear the folder completely to have the same situation always
 for f in os.listdir(nas_path):
     if not f.endswith(".tiff"):
         continue
     os.remove(os.path.join(nas_path, f))
+    time.sleep(0.01)
