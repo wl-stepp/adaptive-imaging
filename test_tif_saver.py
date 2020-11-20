@@ -62,7 +62,7 @@ print('Input : ', np.shape(drp)[0])
 nas_path = '//lebnas1.epfl.ch/microsc125/Watchdog/python_saver/'
 
 i = 0
-for item in range(, 230):
+for item in range(0, 230):
     # for item in range(1, 2002, 1000):  # [1, 208]:  # range(150, 210):
     t1 = time.perf_counter()
     print(item)
