@@ -167,7 +167,7 @@ def on_modified(event):
 
         
         print(int((frameNum-1)/2))
-        print('folder search', int(round((t2 - t1)*1000)))
+        #print('folder search', int(round((t2 - t1)*1000)))
         # Read the mito image first, as it should already be written
         mitoFull = io.imread(mito_path)
 
