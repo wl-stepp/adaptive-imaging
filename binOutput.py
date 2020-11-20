@@ -11,7 +11,7 @@ Application to write a value to a file in a remote location as fast as possible
 import time
 import numpy
 from datetime import datetime
-
+import os.path as ospath
 
 if __name__ == "__main__":
     path = "//lebnas1.epfl.ch/microsc125/Watchdog/"
@@ -45,11 +45,11 @@ if __name__ == "__main__":
         print('done')
 
 
-def write_bin(x, print_time=0):
+def write_bin(x, print_time=0, path="//lebnas1.epfl.ch/microsc125/Watchdog/"):
     # Set the file location for the watched file here
-    path = "//lebnas1.epfl.ch/microsc125/Watchdog/"
+    #path = "//lebnas1.epfl.ch/microsc125/Watchdog/"
     filename = 'binary_output.dat'
-    fullFileDir = path + filename
+    fullFileDir = ospath.join(path, filename)
     f = open(fullFileDir, 'wb')
     f.write(bytearray(x))
     f.close()

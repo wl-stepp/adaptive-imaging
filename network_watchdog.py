@@ -106,12 +106,14 @@ if __name__ == "__main__":
     global frameNumOld, inputSizeOld
     frameNumOld = 100
     inputSizeOld = 0
+    outputDataFull = np.zeros([512, 512])
 
 
 
 
 def on_created(event):
     pass
+    
 
 
 def on_deleted(event):
@@ -137,32 +139,25 @@ def on_modified(event):
     else:
         return
 
-    # Skip file if a newer one is already in the folder
+    # Get what on_created wrote to the binary
     t1 = time.perf_counter()
-    #search_path = os.path.dirname(event.src_path) + '/*.*'
-    latestFile = os.path.dirname(event.src_path) + '\\' + os.listdir(os.path.dirname(event.src_path))[-1]
-    print(latestFile)
-    print(event.src_path)
-    #if max(glob.iglob(search_path), key=os.path.getmtime) == event.src_path:
-    if  latestFile == event.src_path:
+    file = open(os.path.join(os.path.dirname(model_path), 'binary_output.dat'), mode='rb')
+    content = file.read()
+    file.close()
+    # Skip file if a newer one is already in the folder
+    if frameNum >= len(content)-1:
         pass
     else:
         print(int((frameNum-1)/2), ' passed because newer file is already there')
-        t2 = time.perf_counter()
-        print('folder search', int(round((t2 - t1)*1000)))
         return
     t2 = time.perf_counter()
-    print('folder search', int(round((t2 - t1)*1000)))
     
-
-
-
-
+    
     # Construct the mito path
     ### DO THIS IN A NICER WAY! that is not required to have that exact format ###
     mitoFile = 'img_channel000_position000_time' + str((frameNum-1)).zfill(9) + \
         '_z000.tiff'
-    mito_path = os.path.dirname(event.src_path) + '/' + mitoFile
+    mito_path = os.path.join(os.path.dirname(event.src_path), mitoFile)
 
     # Mito is already written, so check size
     mitoSize = os.path.getsize(mito_path)
@@ -172,6 +167,7 @@ def on_modified(event):
 
         
         print(int((frameNum-1)/2))
+        print('folder search', int(round((t2 - t1)*1000)))
         # Read the mito image first, as it should already be written
         mitoFull = io.imread(mito_path)
 
@@ -184,6 +180,7 @@ def on_modified(event):
         # If this is the first frame, get the parameters for contrast and prepare figure
         #print(frameNum)
         inputSize = mitoFull.shape[0]
+        print(frameNum)
         if frameNum == 1 and not inputSize == inputSizeOld:
             inputSize = round(drpFull.shape[0]*resizeParam) if not inputSize == 128 else 128
             outputDataFull = np.zeros([inputSize, inputSize])
@@ -246,7 +243,7 @@ def on_modified(event):
             i = i + 1
 
         # OUTPUT Calculation
-        print('                   ', int(round(np.max(outputDataFull))))
+        # print('                   ', int(round(np.max(outputDataFull))))
         approach = 3
         if approach == 1:
             mask = outputDataFull > 10
@@ -290,7 +287,7 @@ def on_modified(event):
         inputSizeOld = inputSize
         #print('NN took ', round((t4-t3)*1000))
         #print('binary written in ', round((tend-t1)*1000))
-        print('output generated   ', int(output))
+        print('output generated   ', int(output), '\n \n \n')
         
 
 def on_moved(event):
