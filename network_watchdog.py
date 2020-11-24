@@ -140,7 +140,6 @@ def on_modified(event):
         return
 
     # Get what on_created wrote to the binary
-    t1 = time.perf_counter()
     file = open(os.path.join(os.path.dirname(model_path), 'binary_output.dat'), mode='rb')
     content = file.read()
     file.close()
@@ -150,7 +149,6 @@ def on_modified(event):
     else:
         print(int((frameNum-1)/2), ' passed because newer file is already there')
         return
-    t2 = time.perf_counter()
     
     
     # Construct the mito path
@@ -195,7 +193,7 @@ def on_modified(event):
             im[1] = ax[1].imshow(data, vmax = 255, alpha=1)
             im[2] = ax[2].imshow(data, vmax = 255, cmap='hot')
 
-            positions = positions = getTilePositions_v2(np.ones((inputSize,inputSize)), nnImageSize)
+            positions = getTilePositions_v2(np.ones((inputSize,inputSize)), nnImageSize)
             print('overlap is ', positions['overlap'])
             for line in lines:
                 line.remove()
@@ -214,16 +212,14 @@ def on_modified(event):
             
         #Preprocess the data and make tiles if necessary
         #im_3.set_data(filters.gaussian(drpFull, 121.5/56*5, preserve_range=True))   
-        t1 = time.perf_counter()
         inputData, positions = prepareNNImages(mitoFull, drpFull, nnImageSize)
-        t2 = time.perf_counter()
         #print('data prep took', round((t2 - t1)*1000), 'ms')
 
          
         # Calculate the prediction on the full batch of images
-        t3 = time.perf_counter()
+        #t3 = time.perf_counter()
         output_predict = model.predict_on_batch(inputData) #, training=True)
-        t4 = time.perf_counter()
+        #t4 = time.perf_counter()
 
         # Stitch the tiles back together (~2ms 512x512)
         i = 0
