@@ -65,6 +65,7 @@ class MultiPageTIFFViewerQt(QWidget):
         self.outputPlot = pg.PlotWidget()
         pen = pg.mkPen(color='#AAAAAA', style=Qt.DashLine)
         self.frameLine = pg.InfiniteLine(pos=0.5, angle=90, pen=pen)
+        self.outputPlot.addItem(self.frameLine)
 
         # Connect functions to the interactive elements
         self.modelButton.clicked.connect(self.loadModel)
@@ -138,11 +139,11 @@ class MultiPageTIFFViewerQt(QWidget):
             st = positions['stitch']
             st1 = None if st == 0 else -st
             for p in positions['px']:
-                outputDataFull[p[0]+st:p[2]-st, p[1]+st:p[3]-st] =\
+                nnOutput[frame, p[0]+st:p[2]-st, p[1]+st:p[3]-st] =\
                             output_predict[i, st:st1, st:st1, 0]
-                mitoDataFull[p[0]+st:p[2]-st, p[1]+st:p[3]-st] = \
+                mitoDataFull[frame, p[0]+st:p[2]-st, p[1]+st:p[3]-st] = \
                     inputData[i, st:st1, st:st1, 0]
-                drpDataFull[p[0]+st:p[2]-st, p[1]+st:p[3]-st] = \
+                drpDataFull[frame, p[0]+st:p[2]-st, p[1]+st:p[3]-st] = \
                     inputData[i, st:st1, st:st1, 1]
                 i += 1
 
