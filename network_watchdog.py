@@ -38,8 +38,8 @@ from imageTiles import getTilePositions_v2
 if __name__ == "__main__":
 
     # Setting for the watchdogs
-    patterns = ["*.tif", "*.tiff"]
-    ignore_patterns = ["*.txt"]
+    patterns = ["*.tiff"]
+    ignore_patterns = ["*.txt", "*.tif"]
     ignore_directories = True
     case_sensitive = True
     my_event_handler = PatternMatchingEventHandler(patterns, ignore_patterns,
@@ -140,9 +140,7 @@ def on_modified(event):
     content = file.read()
     file.close()
     # Skip file if a newer one is already in the folder
-    if frameNum >= len(content)-1:
-        pass
-    else:
+    if not frameNum >= len(content)-1:
         print(int((frameNum-1)/2), ' passed because newer file is there')
         return
 
@@ -150,26 +148,27 @@ def on_modified(event):
     # DO THIS IN A NICER WAY! that is not required to have that exact format
     mitoFile = 'img_channel000_position000_time' \
         + str((frameNum-1)).zfill(9) + '_z000.tiff'
+    nnFile = 'img_channel000_position000_time' \
+        + str((frameNum)).zfill(9) + 'nn.tif'
     mito_path = os.path.join(os.path.dirname(event.src_path), mitoFile)
-
+    nn_path = os.path.join(os.path.dirname(event.src_path), nnFile)
+    txtFile = os.path.join(os.path.dirname(event.src_path), 'output.txt')
+    
     # Mito is already written, so check size
     mitoSize = os.path.getsize(mito_path)
 
     if size > mitoSize*0.95:
         global im, ax, lines
 
-        print(int((frameNum-1)/2))
-        # print('folder search', int(round((t2 - t1)*1000)))
+        print('frame', int((frameNum-1)/2))
         # Read the mito image first, as it should already be written
         mitoFull = io.imread(mito_path)
 
         # Now read the drp file, should really be done writing
-        # This takes 15 to 30 ms for a 512x512 16bit tif from lebpc34
         drpFull = io.imread(event.src_path)
 
         # If this is the first frame, get the parameters for contrast
         inputSize = mitoFull.shape[0]
-        print(frameNum)
         if frameNum == 1 and not inputSize == inputSizeOld:
             inputSize = round(drpFull.shape[0]*resizeParam) \
                 if not inputSize == 128 else 128
@@ -209,6 +208,10 @@ def on_modified(event):
                                               x=x[1] + positions['stitch'],
                                               linewidth=setWidth, color=setC))
             print('Reinitialized plot')
+        elif frameNum == 1:
+            # Make the txt file to write the output data to
+            print('New txt file written')
+            open(txtFile, 'w+')
 
         # Preprocess the data and make tiles if necessary
         inputData, positions = prepareNNImages(mitoFull, drpFull, nnImageSize)
@@ -255,14 +258,23 @@ def on_modified(event):
             output = int(round(np.max(outputDataFull)))
             outputDataThresh = outputDataFull
 
-        # ***** remove this for real use
+        # ***** Do this in Qt
         im[0].set_data(outputDataThresh)
         im[2].set_data(mitoDataFull)
         im[1].set_data(drpDataFull)
         all_lines = []
 
-        # output = frameNum+1
+        # Write output to binary for Matlab to read
         write_bin(output, 0)
+        # Write matlab to txt file for later
+        f = open(txtFile,'a')
+        f.write('%d, %d\n' % (frameNum, output))
+        f.close()
+        # Save the nn image
+        t1 = time.perf_counter()
+        io.imsave(nn_path, outputDataFull, check_contrast=False)
+        print('txt', time.perf_counter()-t1)
+        
 
         lengthCache = 10
         if len(outputHistogram) > lengthCache:
@@ -272,7 +284,6 @@ def on_modified(event):
         else:
             x = np.arange(0, len(outputHistogram)+1)
         outputHistogram.append(output)
-        print(len(x), len(outputHistogram))
         pltHist[0].set_data(x, outputHistogram)
         axHist.relim()
         axHist.autoscale_view(True, True, True)
