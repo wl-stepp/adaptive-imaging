@@ -12,10 +12,11 @@ Created on Mon Oct  5 12:18:48 2020
 from PyQt5.QtCore import Qt, pyqtSignal, QT_VERSION_STR, QTimer
 from PyQt5.QtWidgets import QWidget, QSlider, QPushButton, QLabel,\
     QGridLayout, QFileDialog, QProgressBar, QGroupBox, QApplication
+from PyQt5.QtGui import QColor, QBrush, QPen, QMovie
 import pyqtgraph as pg
 from skimage import io
 from QtImageViewer import QtImageViewer
-import qimage2ndarray
+from qimage2ndarray import array2qimage
 import sys
 import time
 import numpy as np
@@ -43,6 +44,10 @@ class MultiPageTIFFViewerQt(QWidget):
         self.viewer_mito = QtImageViewer()
         self.viewer_drp = QtImageViewer()
         self.viewer_nn = QtImageViewer()
+        self.nnMaxPos = self.viewer_nn.scene.addEllipse(
+            0, 0, 3, 3, pen=Qt.transparent,
+            brush=QBrush(QColor(255, 0, 0)))
+        self.nnMaxPos.setZValue(100)
         self.loadBox = QGroupBox()
 
         # Connect events for zooming in all output data
@@ -102,38 +107,40 @@ class MultiPageTIFFViewerQt(QWidget):
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.onTimer)
-        self.timer.setInterval(40)
+        self.timer.setInterval(20)
 
         self.app = app
 
     def loadData(self):
         # load images, this goes into a button later
         self.progress.setValue(0)
-        folder = 'C:/Users/stepp/Documents/data_raw/SmartMito/'
         nnImageSize = 128
         pixelCalib = 56  # nm per pixel
         resizeParam = pixelCalib/81  # no unit
 
-        mito_file = folder + 's6_c12_p0_mito.tif'
-        drp_file = folder + 's6_c12_p0_drp1.tif'
-        self.image_mitoOrig = io.imread(mito_file).transpose(0, 2, 1)
-        self.image_drpOrig = io.imread(drp_file).transpose(0, 2, 1)
+        fname = QFileDialog.getOpenFileName(
+            self, 'Open file', 'C:/Users/stepp/Documents/data_raw/SmartMito/')
+        print(fname[0])
+        image_mitoOrig = io.imread(fname[0])
+        image_drpOrig = image_mitoOrig[1::2]
+        image_mitoOrig = image_mitoOrig[0::2]
 
-        print(self.image_mitoOrig.shape)
+        print(image_mitoOrig.shape)
         # Do NN for all images
-        frameNum = self.image_mitoOrig.shape[0]
-        postSize = round(self.image_mitoOrig.shape[1]*resizeParam)
+        frameNum = image_mitoOrig.shape[0]
+        postSize = round(image_mitoOrig.shape[1]*resizeParam)
         nnOutput = np.zeros((frameNum, postSize, postSize))
         mitoDataFull = np.zeros_like(nnOutput)
         drpDataFull = np.zeros_like(nnOutput)
         outputData = []
+        self.max_pos = []
         # set up the progress bar
         self.progress.setRange(0, frameNum-1)
 
-        for frame in range(0, self.image_mitoOrig.shape[0]):
+        for frame in range(0, image_mitoOrig.shape[0]):
             inputData, positions = prepareNNImages(
-                self.image_mitoOrig[frame, :, :],
-                self.image_drpOrig[frame, :, :], nnImageSize)
+                image_mitoOrig[frame, :, :],
+                image_drpOrig[frame, :, :], nnImageSize)
             output_predict = self.model.predict_on_batch(inputData)
             i = 0
             st = positions['stitch']
@@ -148,13 +155,46 @@ class MultiPageTIFFViewerQt(QWidget):
                 i += 1
 
             outputData.append(np.max(nnOutput[frame, :, :]))
+            self.max_pos.append(np.where(nnOutput[frame, :, :] ==
+                                np.max(nnOutput[frame, :, :])))
             self.progress.setValue(frame)
             self.app.processEvents()
 
-        self.outputPlot.plot(outputData)
-        self.image_nn = nnOutput
-        self.image_mito = mitoDataFull
-        self.image_drp = drpDataFull
+        # Make a rolling mean of the output Data
+        N = 10
+        t1 = time.perf_counter()
+        outputDataSmooth = np.ones(len(outputData))
+        outputDataSmooth[0:N] = np.ones(N)*np.mean(outputData[0:N])
+        for x in range(N, len(outputData)):
+            outputDataSmooth[x] = np.sum(outputData[x-N:x])/N
+        print("dt", time.perf_counter() - t1)
+
+        # Make QImages and put in list to display later
+        self.nnMovie = []
+        self.mitoMovie = []
+        self.drpMovie = []
+        self.mitoOrigMovie = []
+        self.drpOrigMovie = []
+        for frame in range(0, nnOutput.shape[0]):
+            self.nnMovie.append(
+                array2qimage(nnOutput[frame, :, :],
+                             normalize=(0, np.mean(outputData))))
+            self.mitoMovie.append(
+                array2qimage(mitoDataFull[frame, :, :], normalize=True))
+            self.drpMovie.append(
+                array2qimage(drpDataFull[frame, :, :], normalize=True))
+            self.mitoOrigMovie.append(
+                array2qimage(image_mitoOrig[frame, :, :], normalize=True))
+            self.drpOrigMovie.append(
+                array2qimage(image_drpOrig[frame, :, :], normalize=True))
+            self.progress.setValue(frame)
+
+        pen = pg.mkPen(color=(192, 251, 255), width=1)
+        pen2 = pg.mkPen(color=(151, 0, 26), width=3)
+        pen3 = pg.mkPen(color=(148, 155, 0), width=3)
+        self.outputPlot.plot(outputData, pen=pen)
+        self.outputPlot.plot(outputDataSmooth, pen=pen2)
+        # self.outputPlot.plot(outputData-outputDataSmooth, pen=pen3)
         self.frameSlider.setMaximum(nnOutput.shape[0]-1)
         self.onTimer()
 
@@ -162,30 +202,25 @@ class MultiPageTIFFViewerQt(QWidget):
 
     def loadModel(self):
         folder = 'C:/Users/stepp/Documents/data_raw/SmartMito/'
-        print('Starting the model up')
         model_path = folder + 'model_Dora.h5'
-        self.model = keras.models.load_model(model_path, compile=True)
+        fname = QFileDialog.getOpenFileName(
+            self, 'Open file', 'C:/Users/stepp/Documents/data_raw/SmartMito/',
+            "Keras models (*.h5)")
+        print(fname[0])
+        self.model = keras.models.load_model(fname[0], compile=True)
         print('Model compiled')
 
     def onTimer(self):
         i = self.frameSlider.value()
-        qimage_mitoOrig = qimage2ndarray.array2qimage(
-            self.image_mitoOrig[i, :, :], normalize=True)
-        qimage_drpOrig = qimage2ndarray.array2qimage(
-            self.image_drpOrig[i, :, :], normalize=True)
-        qimage_drp = qimage2ndarray.array2qimage(
-            self.image_drp[i, :, :], normalize=False)
-        qimage_mito = qimage2ndarray.array2qimage(
-            self.image_mito[i, :, :], normalize=False)
-        qimage_nn = qimage2ndarray.array2qimage(
-            self.image_nn[i, :, :], normalize=(0, 50))
-        self.viewer_mito.setImage(qimage_mito)
-        self.viewer_drp.setImage(qimage_drp)
-        self.viewer_drpOrig.setImage(qimage_drpOrig)
-        self.viewer_mitoOrig.setImage(qimage_mitoOrig)
-        self.viewer_nn.setImage(qimage_nn)
+        self.viewer_mito.setImage(self.mitoMovie[i])
+        self.viewer_drp.setImage(self.drpMovie[i])
+        self.viewer_drpOrig.setImage(self.drpOrigMovie[i])
+        self.viewer_mitoOrig.setImage(self.mitoOrigMovie[i])
+        self.viewer_nn.setImage(self.nnMovie[i])
         self.currentFrameLabel.setText(str(i))
         self.frameLine.setValue(i)
+        self.nnMaxPos.setPos(self.max_pos[i][1][0]-1.5,
+                             self.max_pos[i][0][0]-1.5)
         self.viewer_mito.updateViewer()
 
     def startTimer(self, i=0):

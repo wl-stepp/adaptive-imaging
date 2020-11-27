@@ -36,24 +36,27 @@ input_data_filename2 = data_path + 's3_c6_drp1.tif'  # Drp1
 # input_data_filename1 = data_path + 's6_c12_p0_mito.tif'  # Mito
 # input_data_filename2 = data_path + 's6_c12_p0_drp1.tif'  # Drp1
 
+input_data = data_path + '180420_111.tif'
+
 mito = []
 drp = []
 
-if input_data_filename1[-3:] == '.h5':
-    hf = h5py.File(input_data_filename1, 'r')
-    mito = hf.get('Mito')  # Mito
+if input_data:
+    mito = io.imread(input_data)
+    drp = mito[1::2]
+    mito = mito[0::2]
 else:
-    mito = io.imread(input_data_filename1)
+    if input_data_filename1[-3:] == '.h5':
+        hf = h5py.File(input_data_filename1, 'r')
+        mito = hf.get('Mito')  # Mito
+    else:
+        mito = io.imread(input_data_filename1)
 
-print(mito.dtype)
-print('Input : ', mito.shape)
-print('Input : ', np.shape(mito)[0])
-
-if input_data_filename2[-3:] == '.h5':
-    hf = h5py.File(input_data_filename2, 'r')
-    drp = hf.get('Drp1')
-else:
-    drp = io.imread(input_data_filename2)
+    if input_data_filename2[-3:] == '.h5':
+        hf = h5py.File(input_data_filename2, 'r')
+        drp = hf.get('Drp1')
+    else:
+        drp = io.imread(input_data_filename2)
 
 print(drp.dtype)
 print('Input : ', drp.shape)
@@ -62,7 +65,7 @@ print('Input : ', np.shape(drp)[0])
 nas_path = '//lebnas1.epfl.ch/microsc125/Watchdog/python_saver/'
 
 i = 0
-for item in range(0, 230):
+for item in range(0, 50):
     # for item in range(1, 2002, 1000):  # [1, 208]:  # range(150, 210):
     t1 = time.perf_counter()
     print(item)
@@ -78,7 +81,7 @@ for item in range(0, 230):
     io.imsave(drp_path, drp[item, :, :].astype(np.uint16),
               check_contrast=False)
     t2 = time.perf_counter()
-    time.sleep(np.max([0, .5 - (t2 - t1)]))
+    time.sleep(np.max([0, 1 - (t2 - t1)]))
     i = i + 1
 
 time.sleep(3)
