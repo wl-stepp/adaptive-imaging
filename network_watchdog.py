@@ -271,10 +271,17 @@ def on_modified(event):
 
         # output = frameNum+1
         write_bin(output, 0)
-        if len(outputHistogram) > 200:
+
+        lengthCache = 10
+        if len(outputHistogram) > lengthCache:
+            x = np.arange(frameNum-lengthCache-1, frameNum)
             outputHistogram = outputHistogram[1:]
+            
+        else:
+            x = np.arange(0,len(outputHistogram)+1)
         outputHistogram.append(output)
-        pltHist[0].set_data(range(0, len(outputHistogram)), outputHistogram)
+        print(len(x), len(outputHistogram))
+        pltHist[0].set_data(x, outputHistogram)
         axHist.relim()
         axHist.autoscale_view(True,True,True)
         tend = time.perf_counter()
@@ -283,7 +290,7 @@ def on_modified(event):
         inputSizeOld = inputSize
         #print('NN took ', round((t4-t3)*1000))
         #print('binary written in ', round((tend-t1)*1000))
-        print('output generated   ', int(output), '\n \n \n')
+        print('output generated   ', int(output), '\n')
         
 
 def on_moved(event):
@@ -313,8 +320,8 @@ print('All loaded, running...')
 # Keep running and let image update until Strg + C
 try:
     while True:
-        plt.pause(0.01)
-        time.sleep(0.01)
+        plt.pause(0.1)
+        time.sleep(0.1)
 except KeyboardInterrupt:
     my_observer.stop()
     my_observer.join()
