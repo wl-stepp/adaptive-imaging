@@ -198,14 +198,15 @@ class NetworkWatchdog(QWidget):
             self.outputDataFull = np.zeros([inputSize, inputSize])
             self.mitoDataFull = np.zeros([inputSize, inputSize])
             self.drpDataFull = np.zeros([inputSize, inputSize])
-            self.outputHistogram = []
             # Redraw the lines
             self.reinitGUI.emit(inputSize)
             print('Reinitialized plot')
-        elif frameNum == 1:
+        if frameNum == 1:
             # Make the txt file to write the output data to
             print('New txt file written')
             open(txtFile, 'w+')
+            self.outputHistogram = []
+            self.outputX = []
 
         # Preprocess the data and make tiles if necessary
         inputData, positions = prepareNNImages(
@@ -253,11 +254,10 @@ class NetworkWatchdog(QWidget):
 
         lengthCache = 30
         if len(self.outputHistogram) > lengthCache:
-            x = np.arange(frameNum-lengthCache-1, frameNum)
+            self.outputX = self.outputX[1:]
             self.outputHistogram = self.outputHistogram[1:]
-        else:
-            x = np.arange(0, len(self.outputHistogram)+1)
         self.outputHistogram.append(output)
+        self.outputX.append((frameNum-1)/2)
 
         # Write output to binary for Matlab to read
         write_bin(output, 0)
@@ -286,7 +286,8 @@ class NetworkWatchdog(QWidget):
         self.viewerMito.setImage(self.mitoDisp)
         self.viewerDrp.setImage(self.drpDisp)
         self.viewerNN.setImage(self.nnDisp)
-        self.outputPlot.setData(self.outputHistogram)
+        self.outputPlot.setData(self.outputX, self.outputHistogram)
+        self.viewerOutput.enableAutoRange()
 
     def reinitialize_GUI(self, inputSize):
         positions = getTilePositions_v2(
