@@ -81,7 +81,7 @@ for item in range(0, 50):
     io.imsave(drp_path, drp[item, :, :].astype(np.uint16),
               check_contrast=False)
     t2 = time.perf_counter()
-    time.sleep(np.max([0, 1 - (t2 - t1)]))
+    time.sleep(np.max([0, .5 - (t2 - t1)]))
     i = i + 1
 
 time.sleep(3)
