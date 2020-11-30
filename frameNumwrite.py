@@ -6,7 +6,6 @@ import re
 from binOutput import write_bin
 
 
-
 if __name__ == "__main__":
     patterns = ["*.tiff"]
     ignore_patterns = ["*.txt", "*.tif"]
@@ -15,22 +14,35 @@ if __name__ == "__main__":
     my_event_handler = PatternMatchingEventHandler(patterns, ignore_patterns,
                                                    ignore_directories,
                                                    case_sensitive)
-    model_path = 'E:/Watchdog/SmartMito/model_Dora.h5'
-    
+    if os.environ['COMPUTERNAME'] == 'LEBPC20':
+        modelPath = 'E:/Watchdog/SmartMito/model_Dora.h5'
+    elif os.environ["COMPUTERNAME"] == 'LEBPC34':
+        modelPath = 'C:/Users/stepp/Documents/data_raw/SmartMito/model_Dora.h5'
+
+    global frameNumOld
+    frameNumOld = 100
+
+
 def on_created(event):
+    global frameNumOld
     splitStr = re.split(r'img_channel\d+_position\d+_time',
-                                    os.path.basename(event.src_path))
+                        os.path.basename(event.src_path))
     splitStr = re.split(r'_z\d+', splitStr[1])
     frameNum = int(splitStr[0])
-    if frameNum % 2 and frameNum:      
-        write_bin(frameNum + 1, 0, os.path.dirname(model_path))
-        print(frameNum+1, ' written')
+    if frameNum == frameNumOld:
+        return
+
+    if frameNum % 2 and frameNum:
+        write_bin(frameNum + 1, 0, os.path.dirname(modelPath))
+        print(int((frameNum+1)/2), ' written')
+        frameNumOld = frameNum
+
 
 def on_deleted(event):
-    write_bin(0, 0, os.path.dirname(model_path))
+    write_bin(0, 0, os.path.dirname(modelPath))
     print(0, ' written')
 
-    
+
 my_event_handler.on_deleted = on_deleted
 my_event_handler.on_created = on_created
 

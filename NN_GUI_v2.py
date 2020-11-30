@@ -230,7 +230,6 @@ class MultiPageTIFFViewerQt(QWidget):
         self.timer.stop()
 
     def mouseRelease(self, x, y):
-
         for remoteViewer in [self.viewer_drp, self.viewer_nn]:
             if remoteViewer.canZoom:
                 viewBBox = remoteViewer.zoomStack[-1] if\
