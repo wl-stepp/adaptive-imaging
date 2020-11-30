@@ -129,22 +129,21 @@ def on_modified(event):
     frameNum = int(splitStr[0])
 
     # Only go on if frame number is odd and this frame was not analysed yet
-    if frameNum % 2 and not frameNum == frameNumOld:
-        pass
-    else:
+    if not frameNum % 2 or frameNum == frameNumOld:
         return
 
-    # Get what on_created wrote to the binary
+    # check framNumwrite.py output from the binary
     file = open(os.path.join(
         os.path.dirname(model_path), 'binary_output.dat'), mode='rb')
     content = file.read()
     file.close()
+    
     # Skip file if a newer one is already in the folder
     if not frameNum >= len(content)-1:
         print(int((frameNum-1)/2), ' passed because newer file is there')
         return
 
-    # Construct the mito path
+    # Construct paths
     # DO THIS IN A NICER WAY! that is not required to have that exact format
     mitoFile = 'img_channel000_position000_time' \
         + str((frameNum-1)).zfill(9) + '_z000.tiff'
@@ -163,11 +162,9 @@ def on_modified(event):
         print('frame', int((frameNum-1)/2))
         # Read the mito image first, as it should already be written
         mitoFull = io.imread(mito_path)
-
-        # Now read the drp file, should really be done writing
         drpFull = io.imread(event.src_path)
 
-        # If this is the first frame, get the parameters for contrast
+        # If this is the first frame, reinitialize the plot
         inputSize = mitoFull.shape[0]
         if frameNum == 1 and not inputSize == inputSizeOld:
             inputSize = round(drpFull.shape[0]*resizeParam) \
@@ -233,7 +230,6 @@ def on_modified(event):
             drpDataFull[position[0]+stitch:position[2]-stitch,
                         position[1]+stitch:position[3]-stitch] = \
                 inputData[i, stitch:stitch1, stitch:stitch1, 1]
-
             i = i + 1
 
         # OUTPUT Calculation
@@ -262,19 +258,7 @@ def on_modified(event):
         im[0].set_data(outputDataThresh)
         im[2].set_data(mitoDataFull)
         im[1].set_data(drpDataFull)
-        all_lines = []
-
-        # Write output to binary for Matlab to read
-        write_bin(output, 0)
-        # Write matlab to txt file for later
-        f = open(txtFile,'a')
-        f.write('%d, %d\n' % (frameNum, output))
-        f.close()
-        # Save the nn image
-        t1 = time.perf_counter()
-        io.imsave(nn_path, outputDataFull, check_contrast=False)
-        print('txt', time.perf_counter()-t1)
-        
+        all_lines = []   
 
         lengthCache = 10
         if len(outputHistogram) > lengthCache:
@@ -289,6 +273,18 @@ def on_modified(event):
         axHist.autoscale_view(True, True, True)
         tend = time.perf_counter()
 
+        # Write output to binary for Matlab to read
+        write_bin(output, 0)
+        # Write output to txt file for later
+        f = open(txtFile,'a')
+        f.write('%d, %d\n' % (frameNum, output))
+        f.close()
+        # Save the nn image
+        t1 = time.perf_counter()
+        io.imsave(nn_path, outputDataFull, check_contrast=False)
+        print('txt', time.perf_counter()-t1)
+
+        # Prepare for next cycle
         frameNumOld = frameNum
         inputSizeOld = inputSize
         print('output generated   ', int(output), '\n')
