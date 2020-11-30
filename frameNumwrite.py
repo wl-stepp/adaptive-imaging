@@ -34,7 +34,7 @@ def on_created(event):
 
     if frameNum % 2 and frameNum:
         write_bin(frameNum + 1, 0, os.path.dirname(modelPath))
-        print(int((frameNum+1)/2), ' written')
+        print(int((frameNum-1)/2), ' written')
         frameNumOld = frameNum
 
 
