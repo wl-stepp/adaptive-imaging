@@ -36,7 +36,7 @@ input_data_filename2 = data_path + 's3_c6_drp1.tif'  # Drp1
 input_data_filename1 = data_path + 's6_c12_p0_mito.tif'  # Mito
 input_data_filename2 = data_path + 's6_c12_p0_drp1.tif'  # Drp1
 
-input_data = data_path + '180420_111.tif'
+# input_data = data_path + '180420_111.tif'
 
 mito = []
 drp = []
@@ -65,14 +65,14 @@ print('Input : ', np.shape(drp)[0])
 nas_path = '//lebnas1.epfl.ch/microsc125/Watchdog/python_saver/'
 
 i = 0
-for item in range(0, 250):
+for item in range(0, 100):
     # for item in range(1, 2002, 1000):  # [1, 208]:  # range(150, 210):
     t1 = time.perf_counter()
     print(item)
     mito_path = nas_path + 'img_channel000_position000_time' + \
-        str((i*2)).zfill(9) + '_z000.tiff'
+        str((i*2)).zfill(9) + '_z000.tif'
     drp_path = nas_path + 'img_channel000_position000_time' + \
-        str((i*2 + 1)).zfill(9) + '_z000.tiff'
+        str((i*2 + 1)).zfill(9) + '_z000.tif'
 
     # First write mito then drp as watchdog waits for drp image
     io.imsave(mito_path, mito[item, :, :].astype(np.uint16),
@@ -89,8 +89,8 @@ time.sleep(3)
 # Clear the folder completely to have the same situation always
 print('deleting files')
 for f in os.listdir(nas_path):
-    if not f.endswith(".tiff"):
-        continue
+    # if not f.endswith(".tiff"):
+    #     continue
     os.remove(os.path.join(nas_path, f))
     time.sleep(0.001)
 print('Done')
