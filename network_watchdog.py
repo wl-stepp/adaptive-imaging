@@ -37,7 +37,7 @@ import tensorflow as tf
 # from PIL import Image
 
 # Own modules
-from NNfeeder import prepareNNImages, prepareNNImages_01, prepareNNImages_02
+from NNfeeder import prepareNNImages
 from imageTiles import getTilePositions_v2
 from binOutput import write_bin
 
