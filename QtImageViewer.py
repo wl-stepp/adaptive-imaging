@@ -1,4 +1,6 @@
-""" QtImageViewer.py: PyQt image viewer widget for a QPixmap in a QGraphicsView scene with mouse zooming and panning.
+# pep8 --max-line-length=120 *.py
+""" QtImageViewer.py: PyQt image viewer widget for a QPixmap in a QGraphicsView scene with mouse
+    zooming and panning.
 
 """
 
@@ -10,7 +12,8 @@ try:
 except ImportError:
     try:
         from PyQt4.QtCore import Qt, QRectF, pyqtSignal, QT_VERSION_STR
-        from PyQt4.QtGui import QGraphicsView, QGraphicsScene, QImage, QPixmap, QPainterPath, QFileDialog
+        from PyQt4.QtGui import QGraphicsView, QGraphicsScene, QImage, QPixmap, QPainterPath,\
+            QFileDialog
     except ImportError:
         raise ImportError("QtImageViewer: Requires PyQt5 or PyQt4.")
 
@@ -20,14 +23,15 @@ __version__ = '0.9.0'
 
 
 class QtImageViewer(QGraphicsView):
-    """ PyQt image viewer widget for a QPixmap in a QGraphicsView scene with mouse zooming and panning.
+    """ PyQt image viewer widget for a QPixmap in a QGraphicsView scene with mouse zooming, panning.
 
     Displays a QImage or QPixmap (QImage is internally converted to a QPixmap).
     To display any other image format, you must first convert it to a QImage or QPixmap.
 
     Some useful image format conversion utilities:
         qimage2ndarray: NumPy ndarray <==> QImage    (https://github.com/hmeine/qimage2ndarray)
-        ImageQt: PIL Image <==> QImage  (https://github.com/python-pillow/Pillow/blob/master/PIL/ImageQt.py)
+        ImageQt: PIL Image <==> QImage
+        (https://github.com/python-pillow/Pillow/blob/master/PIL/ImageQt.py)
 
     Mouse interaction:
         Left mouse button drag: Pan image.
@@ -58,7 +62,7 @@ class QtImageViewer(QGraphicsView):
         # !!! ONLY applies to full image. Aspect ratio is always ignored when zooming.
         #   Qt.IgnoreAspectRatio: Scale image to fit viewport.
         #   Qt.KeepAspectRatio: Scale image to fit inside viewport, preserving aspect ratio.
-        #   Qt.KeepAspectRatioByExpanding: Scale image to fill the viewport, preserving aspect ratio.
+        #   Qt.KeepAspectRatioByExpanding: Scale image to fill the viewport, preserving aspect ratio
         self.aspectRatioMode = Qt.KeepAspectRatio
 
         # Scroll bar behaviour.
@@ -123,8 +127,9 @@ class QtImageViewer(QGraphicsView):
 
     def loadImageFromFile(self, fileName=""):
         """ Load an image from file.
-        Without any arguments, loadImageFromFile() will popup a file dialog to choose the image file.
-        With a fileName argument, loadImageFromFile(fileName) will attempt to load the specified image file directly.
+        Without any arguments, loadImageFromFile() will popup a file dialog to choose the image file
+        With a fileName argument, loadImageFromFile(fileName) will attempt to load the specified
+        image file directly.
         """
         if len(fileName) == 0:
             if QT_VERSION_STR[0] == '4':
@@ -141,10 +146,13 @@ class QtImageViewer(QGraphicsView):
         if not self.hasImage():
             return
         if len(self.zoomStack) and self.sceneRect().contains(self.zoomStack[-1]):
-            self.fitInView(self.zoomStack[-1], Qt.IgnoreAspectRatio)  # Show zoomed rect (ignore aspect ratio).
+            # Show zoomed rect (ignore aspect ratio).
+            self.fitInView(self.zoomStack[-1], Qt.IgnoreAspectRatio)
         else:
-            self.zoomStack = []  # Clear the zoom stack (in case we got here because of an invalid zoom).
-            self.fitInView(self.sceneRect(), self.aspectRatioMode)  # Show entire image (use current aspect ratio mode).
+            # Clear the zoom stack (in case we got here because of an invalid zoom).
+            self.zoomStack = []
+            # Show entire image (use current aspect ratio mode).
+            self.fitInView(self.sceneRect(), self.aspectRatioMode)
 
     def resizeEvent(self, event):
         """ Maintain current zoom on resize.
@@ -183,7 +191,6 @@ class QtImageViewer(QGraphicsView):
                     self.zoomStack.append(selectionBBox)
                     self.updateViewer()
             self.setDragMode(QGraphicsView.NoDrag)
-
 
     def mouseDoubleClickEvent(self, event):
         """ Show entire image.

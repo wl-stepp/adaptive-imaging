@@ -11,14 +11,14 @@ import matplotlib.pyplot as plt
 import h5py   # HDF5 data file management library
 from sklearn.model_selection import train_test_split
 import time
-from tqdm.keras import TqdmCallback # Used for Progress bars during training
-
-
+from tqdm.keras import TqdmCallback  # Used for Progress bars during training
 
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, Activation
-from tensorflow.python.keras.layers import Conv2D, MaxPooling2D, Conv3D, MaxPooling3D
-from tensorflow.python.keras.layers import concatenate, UpSampling2D, BatchNormalization, Reshape
+from tensorflow.python.keras.layers import Conv2D, MaxPooling2D, Conv3D, \
+    MaxPooling3D
+from tensorflow.python.keras.layers import concatenate, UpSampling2D, \
+    BatchNormalization, Reshape
 from tensorflow.keras.optimizers import Adam
 
 
@@ -119,8 +119,9 @@ print('data_split_state : ', data_split_state)
 print()
 
 input_train, input_test, output_train, output_test =  \
-    train_test_split(input_data, output_data, \
-                     test_size=data_set_test_trainvalid_ratio, random_state=data_split_state)
+    train_test_split(input_data, output_data,
+                     test_size=data_set_test_trainvalid_ratio,
+                     random_state=data_split_state)
 
 print('input_data : ', input_data.shape, input_data.dtype)
 print('input_train : ', input_train.shape, input_train.dtype)
@@ -131,36 +132,38 @@ print('output_train : ', output_train.shape, output_train.dtype)
 print('output_test : ', output_test.shape, output_test.dtype)
 
 
-optimizer_type = Adam(lr=0.5e-3)  # optimisation algorithm: Adam 
+optimizer_type = Adam(lr=0.5e-3)  # optimisation algorithm: Adam
 # Could do: Start with a higher value and then converge to a smaller value
-loss = 'mean_squared_error'  # loss (cost) function to be minimised by the optimiser
-metrics = ['mean_absolute_error']  # network accuracy metric to be determined after each epoch
-validtrain_split_ratio = 0.2  # % of the seen dataset to be put aside for validation, rest is for training
+loss = 'mean_squared_error'  # loss function to be minimised by the optimiser
+metrics = ['mean_absolute_error']  # accuracy metric determined after ea epoch
+validtrain_split_ratio = 0.2
+# % of the seen dataset to be put aside for validation, rest is for training
 max_epochs = 20  # maxmimum number of epochs to be iterated
 batch_size = 256   # batch size for the training data set
-batch_shuffle = True   # shuffle the training data prior to batching before each epoch
+batch_shuffle = True   # shuffle training data prior to batching and each epoch
 
 nb_filters = 8
 firstConvSize = 9
 
 
-input_shape = (128, 128, 2,1)
+input_shape = (128, 128, 2, 1)
 inputs = Input(shape=input_shape)
 
 # encoder section
-# THIS IS WHERE tensorflow fails with the old GPU on lebpc34
 
 print('* Start Encoder Section *')
-down0 = Conv3D(nb_filters, (firstConvSize, firstConvSize, 2), padding='same')(inputs)
+down0 = Conv3D(
+    nb_filters, (firstConvSize, firstConvSize, 2), padding='same')(inputs)
 down0 = BatchNormalization()(down0)
 down0 = Activation('relu')(down0)
-down0 = Conv3D(nb_filters, (firstConvSize, firstConvSize, 2), padding='same')(down0)
+down0 = Conv3D(
+    nb_filters, (firstConvSize, firstConvSize, 2), padding='same')(down0)
 down0 = BatchNormalization()(down0)
 down0 = Activation('relu')(down0)
 down0_pool = MaxPooling3D((2, 2, 2), strides=(2, 2, 2))(down0)
 down0_pool = Reshape((64, 64, nb_filters))(down0_pool)
-down0 = Reshape((128,128,nb_filters*2))(down0)
-    
+down0 = Reshape((128, 128, nb_filters*2))(down0)
+
 down1 = Conv2D(nb_filters*2, (3, 3), padding='same')(down0_pool)
 down1 = BatchNormalization()(down1)
 down1 = Activation('relu')(down1)
@@ -168,20 +171,20 @@ down1 = Conv2D(nb_filters*2, (3, 3), padding='same')(down1)
 down1 = BatchNormalization()(down1)
 down1 = Activation('relu')(down1)
 down1_pool = MaxPooling2D((2, 2), strides=(2, 2))(down1)
-    
+
 # center section
 
-print('* Start Center Section *')    
+print('* Start Center Section *')
 center = Conv2D(nb_filters*4, (3, 3), padding='same')(down1_pool)
 center = BatchNormalization()(center)
 center = Activation('relu')(center)
 center = Conv2D(nb_filters*4, (3, 3), padding='same')(center)
 center = BatchNormalization()(center)
 center = Activation('relu')(center)
-    
+
 # decoder section with skip connections to the encoder section
 
-print('* Start Decoder Section *') 
+print('* Start Decoder Section *')
 up1 = UpSampling2D((2, 2))(center)
 up1 = concatenate([down1, up1], axis=3)
 up1 = Conv2D(nb_filters*2, (3, 3), padding='same')(up1)
@@ -214,7 +217,7 @@ t2 = time.perf_counter
 
 # display a summary of the compiled neural network
 
-print(model.summary())  
+print(model.summary())
 print()
 
 
@@ -222,12 +225,12 @@ print('* Training the compiled network *')
 print()
 
 t1 = time.perf_counter()
-history = model.fit(input_train, output_train, \
-                    batch_size=batch_size, \
-                    epochs=max_epochs, \
-                    validation_split=validtrain_split_ratio, \
-                    shuffle=batch_shuffle, \
-                    verbose=0, \
+history = model.fit(input_train, output_train,
+                    batch_size=batch_size,
+                    epochs=max_epochs,
+                    validation_split=validtrain_split_ratio,
+                    shuffle=batch_shuffle,
+                    verbose=0,
                     callbacks=[TqdmCallback(verbose=1)])
 
 t2 = time.perf_counter()
@@ -257,98 +260,92 @@ plt.legend(['Training', 'Validation'], loc='best')
 plt.pause(1)
 
 
-AverageLossVal=history.history['val_loss']
-AverageLossVal=sum(AverageLossVal[-5:])/len(AverageLossVal[-5:])
+AverageLossVal = history.history['val_loss']
+AverageLossVal = sum(AverageLossVal[-5:])/len(AverageLossVal[-5:])
 
-AverageLossTrain=history.history['loss']
-AverageLossTrain=sum(AverageLossTrain[-5:])/len(AverageLossTrain[-5:])
+AverageLossTrain = history.history['loss']
+AverageLossTrain = sum(AverageLossTrain[-5:])/len(AverageLossTrain[-5:])
 
-AverageAccTrain=history.history[metrics[0]]
-AverageAccTrain=sum(AverageAccTrain[-5:])/len(AverageAccTrain[-5:])
+AverageAccTrain = history.history[metrics[0]]
+AverageAccTrain = sum(AverageAccTrain[-5:])/len(AverageAccTrain[-5:])
 
-AverageAccVal=history.history['val_' + metrics[0]]
-AverageAccVal=sum(AverageAccVal[-5:])/len(AverageAccVal[-5:])
+AverageAccVal = history.history['val_' + metrics[0]]
+AverageAccVal = sum(AverageAccVal[-5:])/len(AverageAccVal[-5:])
 
 print('Average validation loss: ', AverageLossVal)
 print('Average training loss: ', AverageLossTrain)
 print('Average validation accuracy: ', AverageAccVal)
 print('Average training accuracy: ', AverageAccTrain)
 
-
-
-print('* Evaluating the performance of the trained network on the unseen test dataset *')
+print('* Evaluating performance of trained network on the unseen dataset *')
 print()
 
-evaluate_model = model.evaluate(x=input_test, y=output_test,verbose=0,callbacks=[TqdmCallback(verbose=1)])
-loss_metric = evaluate_model [0]
-accuracy_metric = evaluate_model [1]
+evaluate_model = model.evaluate(
+    x=input_test, y=output_test, verbose=0,
+    callbacks=[TqdmCallback(verbose=1)])
+loss_metric = evaluate_model[0]
+accuracy_metric = evaluate_model[1]
 
 print()
-print('Accuracy - ' + metrics[0] + ': %0.3f'%accuracy_metric)
-print('Loss - ' + loss + ': %0.3f'%loss_metric)
+print('Accuracy - ' + metrics[0] + ': %0.3f' % accuracy_metric)
+print('Loss - ' + loss + ': %0.3f' % loss_metric)
 
 
 # Save the compiled model to be used later
 print('* Save the Model for later use *')
 model_path = data_path + 'test_model'
-tf.keras.models.save_model(model,model_path)
-
-
-
-
+tf.keras.models.save_model(model, model_path)
 
 print('* Predicting the output of a given input from test set *')
 print()
 
-#for i in range(input_test.shape[0]):
+# for i in range(input_test.shape[0]):
 
 for i in range(3):
-  test_id = i
+    test_id = i
 
+    # create numpy array of required dimensions for network input
+    input_predict = np.zeros(shape=(1, 128, 128, 2, 1))
 
-  input_predict = np.zeros(shape=(1, 128, 128, 2, 1))  # create numpy array of required dimensions for network input
+    # reshaping test input image
+    input_predict[0, :, :, :, 0] = input_test[test_id, :, :, :, 0]
+    t1 = time.perf_counter()
+    output_predict = model.predict(input_predict)
+    t2 = time.perf_counter()
 
-  input_predict[0, :, :, :, 0] = input_test[test_id, :, :, :, 0]  # reshaping test input image
+    print('time taken for prediction : ', t2-t1)
 
-  t1 = time.perf_counter()
-  output_predict = model.predict(input_predict)
-  t2 = time.perf_counter()
+    print('test_id : ', test_id)
+    print()
 
-  print('time taken for prediction : ', t2-t1)
+    # plot prediction example from test set
+    fig = plt.figure()
+    fig.add_subplot(1, 4, 1)
+    plt.imshow(input_test[test_id, :, :, 0, 0], cmap='gray')
+    plt.title('input_test [' + str(test_id) + ']')
+    plt.grid(None)
+    plt.xticks([])
+    plt.yticks([])
 
-  print('test_id : ', test_id)
-  print()
+    fig.add_subplot(1, 4, 2)
+    plt.imshow(input_test[test_id, :, :, 1, 0], cmap='gray')
+    plt.title('input_test [' + str(test_id) + ']')
+    plt.grid(None)
+    plt.xticks([])
+    plt.yticks([])
 
-  # plot prediction example from test set
-  fig = plt.figure()
-  fig.add_subplot(1,4,1)
-  plt.imshow(input_test[test_id, :, :, 0, 0], cmap='gray')
-  plt.title('input_test [' + str(test_id) + ']')
-  plt.grid(None)
-  plt.xticks([])
-  plt.yticks([])
+    fig.add_subplot(1, 4, 3)
+    plt.imshow(output_predict[0, :, :, 0], cmap='gray')
+    plt.title('output_predict')
+    plt.grid(None)
+    plt.xticks([])
+    plt.yticks([])
 
-
-  fig.add_subplot(1,4,2)
-  plt.imshow(input_test[test_id, :, :, 1, 0], cmap='gray')
-  plt.title('input_test [' + str(test_id) + ']')
-  plt.grid(None)
-  plt.xticks([])
-  plt.yticks([])
-
-
-  fig.add_subplot(1,4,3)
-  plt.imshow(output_predict[0, :, :, 0], cmap='gray')
-  plt.title('output_predict')
-  plt.grid(None)
-  plt.xticks([])
-  plt.yticks([])
-
-  fig.add_subplot(1,4,4)
-  plt.imshow(output_test[test_id, :, :, 0, 0], cmap='gray')
-  plt.title('output_test [' + str(test_id) + ']')
-  plt.grid(None)
-  plt.xticks([])
-  plt.yticks([])
-  plt.draw()
-  plt.pause(2)
+    fig.add_subplot(1, 4, 4)
+    plt.imshow(output_test[test_id, :, :, 0, 0], cmap='gray')
+    plt.title('output_test [' + str(test_id) + ']')
+    plt.grid(None)
+    plt.xticks([])
+    plt.yticks([])
+    plt.draw()
+    plt.pause(2)

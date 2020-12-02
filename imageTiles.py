@@ -89,13 +89,12 @@ def getTilePositions_v2(image, targetSize=128):
 
     while not cond and n < targetSize and n > 1:
         overlap = (n*targetSize-image.shape[0])/(n-1)
-        if overlap % 2: overlap = overlap - 1
+        overlap = overlap - 1 if overlap % 2 else overlap
         if int(overlap) >= min_overlap:
             overlap = int(overlap)
             cond = True
         else:
             n = n + 1
-
 
     # For nxn tiles calculate the pixel positions considering the overlap
     a = [range(0, n)]*2

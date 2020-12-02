@@ -134,6 +134,7 @@ class NetworkWatchdog(QWidget):
 
         self.frameNumOld = 100
         self.inputSizeOld = 0
+        self.folderNameOld = 'noFolder'
         self.outputDataFull = np.zeros([512, 512])
         self.imageViewer = [self.viewerMito, self.viewerDrp, self.viewerNN]
         for viewer in self.imageViewer:
@@ -192,7 +193,8 @@ class NetworkWatchdog(QWidget):
 
         # If this is the first frame, reinitialize the plot
         inputSize = mitoFull.shape[0]
-        if frameNum == 1 and not inputSize == self.inputSizeOld:
+        folderName = os.path.dirname(event.src_path)
+        if not folderName == self.folderNameOld and not inputSize == self.inputSizeOld:
             inputSize = round(drpFull.shape[0]*self.resizeParam) if not \
                 inputSize == 128 else 128
             self.outputDataFull = np.zeros([inputSize, inputSize])
@@ -201,8 +203,9 @@ class NetworkWatchdog(QWidget):
             # Redraw the lines
             self.reinitGUI.emit(inputSize)
             print('Reinitialized plot')
-        if frameNum == 1:
+        if not folderName == self.folderNameOld:
             # Make the txt file to write the output data to
+            print(folderName)
             print('New txt file written')
             open(txtFile, 'w+')
             self.outputHistogram = []
@@ -280,6 +283,7 @@ class NetworkWatchdog(QWidget):
         # Prepare for next cycle
         self.frameNumOld = frameNum
         self.inputSizeOld = inputSize
+        self.folderNameOld = folderName
         print('output generated   ', int(output), '\n')
 
     def refresh_GUI(self, event=0):

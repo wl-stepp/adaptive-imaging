@@ -47,7 +47,7 @@ if __name__ == "__main__":
 
 def write_bin(x, print_time=0, path="//lebnas1.epfl.ch/microsc125/Watchdog/"):
     # Set the file location for the watched file here
-    #path = "//lebnas1.epfl.ch/microsc125/Watchdog/"
+    # path = "//lebnas1.epfl.ch/microsc125/Watchdog/"
     filename = 'binary_output.dat'
     fullFileDir = ospath.join(path, filename)
     f = open(fullFileDir, 'wb')
