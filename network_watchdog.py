@@ -60,8 +60,8 @@ class NetworkWatchdog(QWidget):
     def __init__(self, app):
 
         # Setting for the watchdogs
-        patterns = ["*.tiff"]
-        ignore_patterns = ["*.txt", "*.tif"]
+        patterns = ["*.tif"]
+        ignore_patterns = ["*.txt", "*.tiff"]
         ignore_directories = True
         case_sensitive = True
         my_event_handler = PatternMatchingEventHandler(
@@ -101,11 +101,11 @@ class NetworkWatchdog(QWidget):
         # Get colormaps into format for QImages
         colormap = cm.get_cmap("hot")
         colormap._init()
-        lut = (colormap._lut * 255).view(np.ndarray)
+        lut = (colormap._lut * 255).view(np.ndarray).astype(int)
         self.lutHot = [qRgb(i[0], i[1], i[2]) for i in lut]
         colormap = cm.get_cmap("inferno")
         colormap._init()
-        lut = (colormap._lut * 255).view(np.ndarray)
+        lut = (colormap._lut * 255).view(np.ndarray).astype(int)
         self.lutInferno = [qRgb(i[0], i[1], i[2]) for i in lut]
 
         # Assign the event handlers
@@ -172,9 +172,9 @@ class NetworkWatchdog(QWidget):
         # Construct paths
         # DO THIS IN A NICER WAY! not required to have that exact format
         mitoFile = 'img_channel000_position000_time' \
-            + str((frameNum-1)).zfill(9) + '_z000.tiff'
+            + str((frameNum-1)).zfill(9) + '_z000.tif'
         nnFile = 'img_channel000_position000_time' \
-            + str((frameNum)).zfill(9) + 'nn.tif'
+            + str((frameNum)).zfill(9) + '_nn.tiff'
         mito_path = os.path.join(os.path.dirname(event.src_path), mitoFile)
         nn_path = os.path.join(os.path.dirname(event.src_path), nnFile)
         txtFile = os.path.join(os.path.dirname(event.src_path), 'output.txt')

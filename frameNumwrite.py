@@ -7,8 +7,8 @@ from binOutput import write_bin
 
 
 if __name__ == "__main__":
-    patterns = ["*.tiff"]
-    ignore_patterns = ["*.txt", "*.tif"]
+    patterns = ["*.tif"]
+    ignore_patterns = ["*.txt", "*.tiff"]
     ignore_directories = True
     case_sensitive = True
     my_event_handler = PatternMatchingEventHandler(patterns, ignore_patterns,
