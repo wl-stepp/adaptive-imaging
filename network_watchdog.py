@@ -188,8 +188,12 @@ class NetworkWatchdog(QWidget):
 
         print('frame', int((frameNum-1)/2))
         # Read the mito image first, as it should already be written
-        mitoFull = io.imread(mito_path)
-        drpFull = io.imread(event.src_path)
+        # mitoFull = io.imread(mito_path)
+        # drpFull = io.imread(event.src_path)
+        # switched for Drp > green mito > red
+        mitoFull = io.imread(event.src_path)
+        drpFull = io.imread(mito_path)
+        print(mitoFull.shape)
 
         # If this is the first frame, reinitialize the plot
         inputSize = mitoFull.shape[0]
@@ -214,7 +218,7 @@ class NetworkWatchdog(QWidget):
         # Preprocess the data and make tiles if necessary
         inputData, positions = prepareNNImages(
             mitoFull, drpFull, self.nnImageSize)
-
+        print(inputData.shape)
         # Calculate the prediction on the full batch of images
         output_predict = self.model.predict_on_batch(inputData)
 

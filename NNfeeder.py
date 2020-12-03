@@ -45,6 +45,9 @@ def prepareNNImages(mitoFull, drpFull, nnImageSize):
         mitoFull = exposure.rescale_intensity(
             mitoFull, (np.mean(mitoFull), np.max(mitoFull)),
             out_range=(0, 255))
+        # drpFull = drpFull.astype(np.uint8)
+        # mitoFull = mitoFull.astype(np.uint8)
+        
         t3 = time.perf_counter()
 
         # Tiling
