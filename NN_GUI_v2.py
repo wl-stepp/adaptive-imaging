@@ -12,7 +12,7 @@ Created on Mon Oct  5 12:18:48 2020
 from PyQt5.QtCore import Qt, pyqtSignal, QT_VERSION_STR, QTimer
 from PyQt5.QtWidgets import QWidget, QSlider, QPushButton, QLabel,\
     QGridLayout, QFileDialog, QProgressBar, QGroupBox, QApplication
-from PyQt5.QtGui import QColor, QBrush, QPen, QMovie
+from PyQt5.QtGui import QColor, QBrush, QPen, QMovie, qRgb
 import pyqtgraph as pg
 from skimage import io
 from QtImageViewer import QtImageViewer
@@ -23,6 +23,7 @@ import numpy as np
 from NNfeeder import prepareNNImages
 from imageTiles import getTilePositions_v2
 from tensorflow import keras
+from matplotlib import cm
 # Adjust for different screen sizes
 QApplication.setAttribute(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
 
@@ -45,8 +46,8 @@ class MultiPageTIFFViewerQt(QWidget):
         self.viewer_drp = QtImageViewer()
         self.viewer_nn = QtImageViewer()
         self.nnMaxPos = self.viewer_nn.scene.addEllipse(
-            0, 0, 3, 3, pen=Qt.transparent,
-            brush=QBrush(QColor(255, 0, 0)))
+           0, 0, 3, 3, pen=Qt.transparent,
+           brush=QBrush(QColor(255, 0, 0)))
         self.nnMaxPos.setZValue(100)
         self.loadBox = QGroupBox()
 
@@ -111,8 +112,23 @@ class MultiPageTIFFViewerQt(QWidget):
 
         self.app = app
 
+        # Prepare Colormaps
+        colormap = cm.get_cmap("hot")
+        colormap._init()
+        lut = (colormap._lut * 255).view(np.ndarray).astype(int)
+        self.lutHot = [qRgb(i[0], i[1], i[2]) for i in lut]
+        colormap = cm.get_cmap("inferno")
+        colormap._init()
+        lut = (colormap._lut * 255).view(np.ndarray).astype(int)
+        self.lutInferno = [qRgb(i[0], i[1], i[2]) for i in lut]
+
+        self.linePen = pg.mkPen(color='#AAAAAA')
+        self.viewerWLines = [self.viewer_drp, self.viewer_mito, self.viewer_nn]
+        for viewer in self.viewerWLines:
+            viewer.lines = []
+
     def loadData(self):
-        # load images, this goes into a button later
+        # load images
         self.progress.setValue(0)
         nnImageSize = 128
         pixelCalib = 56  # nm per pixel
@@ -196,9 +212,40 @@ class MultiPageTIFFViewerQt(QWidget):
         self.outputPlot.plot(outputDataSmooth, pen=pen2)
         # self.outputPlot.plot(outputData-outputDataSmooth, pen=pen3)
         self.frameSlider.setMaximum(nnOutput.shape[0]-1)
-        self.onTimer()
 
-        print('Done with everything')
+        for viewer in self.viewerWLines:
+            for line in viewer.lines:
+                viewer.scene.removeItem(line)
+            viewer.lines = []
+            viewer.lines.append(
+                viewer.scene.addLine(
+                                     postSize - positions['stitch'],
+                                     0,
+                                     postSize - positions['stitch'],
+                                     postSize))
+            viewer.lines.append(
+                viewer.scene.addLine(0,
+                                     postSize - positions['stitch'],
+                                     postSize,
+                                     postSize - positions['stitch']))
+
+            for x in positions['px']:
+                viewer.lines.append(
+                    viewer.scene.addLine(x[0] + positions['stitch'],
+                                         0,
+                                         x[0] + positions['stitch'],
+                                         postSize))
+                viewer.lines.append(
+                    viewer.scene.addLine(0,
+                                         x[1] + positions['stitch'],
+                                         postSize,
+                                         x[1] + positions['stitch']))
+            for line in viewer.lines:
+                line.setPen(self.linePen)
+                line.setZValue(100)
+
+        self.onTimer()
+        print('Done loading Images')
 
     def loadModel(self):
         folder = 'C:/Users/stepp/Documents/data_raw/SmartMito/'

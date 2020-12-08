@@ -9,7 +9,7 @@ updates it in the associated figure window. Will be modified to make visual
 output optional and adding a neural network that is used to mark interesting
 events in the image.
 
-Used in an environment where microManager running on an other machine saves an
+Used in an environment where microManager running on another machine saves an
 image to a NAS location, that should be observed, read and analysed. The binary
 output will go to the same NAS and is expected to be read by a Matlab program
 that runs on the same machine as microManager.
@@ -42,13 +42,15 @@ from imageTiles import getTilePositions_v2
 from binOutput import write_bin
 
 # Qt display imports
-from PyQt5.QtCore import Qt, pyqtSignal, QT_VERSION_STR, QTimer
+from PyQt5.QtCore import Qt, pyqtSignal, QT_VERSION_STR, QTimer, QRectF, QRect
 from PyQt5.QtWidgets import QWidget, QSlider, QPushButton, QLabel,\
-    QGridLayout, QFileDialog, QProgressBar, QGroupBox, QApplication
+    QGridLayout, QFileDialog, QProgressBar, QGroupBox, QApplication, QStyleOptionGraphicsItem
 from PyQt5.QtGui import QColor, QBrush, QPen, QMovie, qRgb, QImage
 import pyqtgraph as pg
 from QtImageViewer import QtImageViewer
+from QtImageViewerMerge import QtImageViewerMerge
 from qimage2ndarray import array2qimage, gray2qimage
+from QtToolbox import getQtcolormap
 
 
 class NetworkWatchdog(QWidget):
@@ -85,28 +87,23 @@ class NetworkWatchdog(QWidget):
 
         # Figure for the outputs
         QWidget.__init__(self)
-        self.viewerMito = QtImageViewer()
-        self.viewerDrp = QtImageViewer()
-        self.viewerNN = QtImageViewer()
+        self.viewerMerge = QtImageViewerMerge()
+        self.imageDrp = self.viewerMerge.addImage()
+        self.imageMito = self.viewerMerge.addImage()
+        self.viewerNN = QtImageViewerMerge()
+        self.imageNN = self.viewerNN.addImage()
+
         self.viewerOutput = pg.PlotWidget()
         self.outputPlot = self.viewerOutput.plot()
+        self.viewerMerge.setLookupTable(self.imageDrp, 'viridis', False)
+        self.viewerMerge.setLookupTable(self.imageMito, 'hot', True)
+        self.viewerMerge.setLookupTable(self.imageNN, 'inferno', False)
 
         grid = QGridLayout(self)
-        grid.addWidget(self.viewerMito, 0, 0)
-        grid.addWidget(self.viewerDrp, 0, 1)
-        grid.addWidget(self.viewerNN, 1, 0)
-        grid.addWidget(self.viewerOutput, 1, 1)
+        grid.addWidget(self.viewerMerge, 1, 0)
+        grid.addWidget(self.viewerNN, 1, 1)
+        grid.addWidget(self.viewerOutput, 0, 0, 1, 2)
         self.linePen = pg.mkPen(color='#AAAAAA')
-
-        # Get colormaps into format for QImages
-        colormap = cm.get_cmap("hot")
-        colormap._init()
-        lut = (colormap._lut * 255).view(np.ndarray).astype(int)
-        self.lutHot = [qRgb(i[0], i[1], i[2]) for i in lut]
-        colormap = cm.get_cmap("inferno")
-        colormap._init()
-        lut = (colormap._lut * 255).view(np.ndarray).astype(int)
-        self.lutInferno = [qRgb(i[0], i[1], i[2]) for i in lut]
 
         # Assign the event handlers
         my_event_handler.on_created = self.on_created
@@ -115,6 +112,8 @@ class NetworkWatchdog(QWidget):
         my_event_handler.on_moved = self.on_moved
         self.refreshGUI.connect(self.refresh_GUI)
         self.reinitGUI.connect(self.reinitialize_GUI)
+        self.viewerNN.vb.setXLink(self.viewerMerge.vb)
+        self.viewerNN.vb.setYLink(self.viewerMerge.vb)
 
         # More settings for the Watchdos
         path = "//lebnas1.epfl.ch/microsc125/Watchdog/"
@@ -136,7 +135,7 @@ class NetworkWatchdog(QWidget):
         self.inputSizeOld = 0
         self.folderNameOld = 'noFolder'
         self.outputDataFull = np.zeros([512, 512])
-        self.imageViewer = [self.viewerMito, self.viewerDrp, self.viewerNN]
+        self.imageViewer = [self.viewerMerge, self.viewerNN]
         for viewer in self.imageViewer:
             viewer.lines = []
 
@@ -206,6 +205,7 @@ class NetworkWatchdog(QWidget):
             self.drpDataFull = np.zeros([inputSize, inputSize])
             # Redraw the lines
             self.reinitGUI.emit(inputSize)
+            self.viewerNN.cross.show()
             print('Reinitialized plot')
         if not folderName == self.folderNameOld:
             # Make the txt file to write the output data to
@@ -258,6 +258,9 @@ class NetworkWatchdog(QWidget):
         elif approach == 3:
             output = int(round(np.max(self.outputDataFull)))
             outputDataThresh = self.outputDataFull
+        # Define where the position was found
+
+        self.maxPos = list(zip(*np.where(self.outputDataFull == np.max(self.outputDataFull))))
 
         lengthCache = 30
         if len(self.outputHistogram) > lengthCache:
@@ -276,12 +279,12 @@ class NetworkWatchdog(QWidget):
         io.imsave(nn_path, self.outputDataFull, check_contrast=False)
 
         # Prepare images for plot and emit plotting event
-        self.mitoDisp = gray2qimage(self.mitoDataFull, normalize=True)
-        self.mitoDisp.setColorTable(self.lutHot)
-        self.drpDisp = gray2qimage(self.drpDataFull, normalize=True)
-        self.nnDisp = gray2qimage(self.outputDataFull, normalize=(0, 50))
+        # self.mitoDisp = gray2qimage(self.mitoDataFull, normalize=True)
+        # self.mitoDisp.setColorTable(self.lutHot)
+        # self.drpDisp = gray2qimage(self.drpDataFull, normalize=True)
+        # self.nnDisp = gray2qimage(self.outputDataFull, normalize=(0, 50))
         # np.mean(self.outputHistogram)*2 instead of 50?!
-        self.nnDisp.setColorTable(self.lutInferno)
+        # self.nnDisp.setColorTable(getQtcolormap('inferno'))
         self.refreshGUI.emit()
 
         # Prepare for next cycle
@@ -291,10 +294,12 @@ class NetworkWatchdog(QWidget):
         print('output generated   ', int(output), '\n')
 
     def refresh_GUI(self, event=0):
-        self.viewerMito.setImage(self.mitoDisp)
-        self.viewerDrp.setImage(self.drpDisp)
-        self.viewerNN.setImage(self.nnDisp)
+        self.imageMito.setImage(self.mitoDataFull)
+        self.imageDrp.setImage(self.drpDataFull)
+        self.imageNN.setImage(self.outputDataFull)
         self.outputPlot.setData(self.outputX, self.outputHistogram)
+        self.viewerMerge.cross.setPosition(self.maxPos)
+        self.viewerNN.cross.setPosition(self.maxPos)
         self.viewerOutput.enableAutoRange()
 
     def reinitialize_GUI(self, inputSize):
@@ -305,33 +310,11 @@ class NetworkWatchdog(QWidget):
             for line in viewer.lines:
                 viewer.scene.removeItem(line)
             viewer.lines = []
-            viewer.lines.append(
-                viewer.scene.addLine(
-                                     inputSize - positions['stitch'],
-                                     0,
-                                     inputSize - positions['stitch'],
-                                     inputSize))
-            viewer.lines.append(
-                viewer.scene.addLine(0,
-                                     inputSize - positions['stitch'],
-                                     inputSize,
-                                     inputSize - positions['stitch']))
-
-            for x in positions['px']:
-                viewer.lines.append(
-                    viewer.scene.addLine(x[0] + positions['stitch'],
-                                         0,
-                                         x[0] + positions['stitch'],
-                                         inputSize))
-                viewer.lines.append(
-                    viewer.scene.addLine(0,
-                                         x[1] + positions['stitch'],
-                                         inputSize,
-                                         x[1] + positions['stitch']))
 
             for line in viewer.lines:
                 line.setPen(self.linePen)
                 line.setZValue(100)
+        self.viewerMerge.vb.setRange(xRange=(0, inputSize), yRange=(0, inputSize))
 
     def on_moved(self, event):
         pass

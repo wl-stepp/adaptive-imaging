@@ -37,15 +37,19 @@ input_data_filename2 = data_path + 's3_c6_drp1.tif'  # Drp1
 input_data_filename1 = data_path + 's6_c12_p0_mito.tif'  # Mito
 input_data_filename2 = data_path + 's6_c12_p0_drp1.tif'  # Drp1
 
-input_data = data_path + '180420_111.tif'
+# input_data = data_path + '180420_111.tif'
+
+input_data = data_path + '180420_130.tif'
+
 
 mito = []
 drp = []
 
 if 'input_data' in locals():
-    mito = io.imread(input_data)
-    drp = mito[1::2]
-    mito = mito[0::2]
+    mito_all = io.imread(input_data)
+    mito = mito_all[1::2]
+    drp = mito_all[0::2]
+    print('single file interleaved')
 else:
     if input_data_filename1[-3:] == '.h5':
         hf = h5py.File(input_data_filename1, 'r')
@@ -74,13 +78,13 @@ new_folder = os.path.join(nas_path, 'test_' + str(num+1).zfill(3))
 os.mkdir(new_folder)
 
 i = 0
-for item in range(0, 10):
+for item in range(0, 100):
     # for item in range(1, 2002, 1000):  # [1, 208]:  # range(150, 210):
     t1 = time.perf_counter()
     print(item)
-    mito_path = new_folder + '\img_channel000_position000_time' + \
+    mito_path = new_folder + '/img_channel000_position000_time' + \
         str((i*2)).zfill(9) + '_z000.tif'
-    drp_path = new_folder + '\img_channel000_position000_time' + \
+    drp_path = new_folder + '/img_channel000_position000_time' + \
         str((i*2 + 1)).zfill(9) + '_z000.tif'
 
     # First write mito then drp as watchdog waits for drp image
@@ -90,7 +94,7 @@ for item in range(0, 10):
     io.imsave(drp_path, drp[item, :, :].astype(np.uint16),
               check_contrast=False)
     t2 = time.perf_counter()
-    time.sleep(np.max([0, .5 - (t2 - t1)]))
+    time.sleep(np.max([0, .3 - (t2 - t1)]))
     i = i + 1
 
 time.sleep(3)
@@ -103,3 +107,8 @@ for f in os.listdir(new_folder):
     os.remove(os.path.join(new_folder, f))
     time.sleep(0.001)
 print('Done')
+
+
+del input_data
+del input_data_filename1
+del input_data_filename2
