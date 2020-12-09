@@ -262,12 +262,21 @@ class NetworkWatchdog(QWidget):
 
         self.maxPos = list(zip(*np.where(self.outputDataFull == np.max(self.outputDataFull))))
 
-        lengthCache = 30
+        now_str = datetime.now()
+        h = now_str.strftime("%H")
+        m = now_str.strftime("%M")
+        s = now_str.strftime("%S")
+        ms = now_str.strftime("%f")
+        print(ms)
+        tX = int(h)*60*60*1000 + int(m)*60*1000 + int(s)*1000 + int(ms[:2])
+        print(tX)
+        
+        lengthCache = 100
         if len(self.outputHistogram) > lengthCache:
             self.outputX = self.outputX[1:]
             self.outputHistogram = self.outputHistogram[1:]
         self.outputHistogram.append(output)
-        self.outputX.append((frameNum-1)/2)
+        self.outputX.append(tX)  # (frameNum-1)/2)
 
         # Write output to binary for Matlab to read
         write_bin(output, 0)
