@@ -94,6 +94,8 @@ class MultiPageTIFFViewerQt(QWidget):
         self.modelButton.clicked.connect(self.loadModel)
         self.dataButton.clicked.connect(self.loadData)
         self.orderButton.clicked.connect(self.orderChange)
+        self.prevFrameButton.clicked.connect(self.prevFrame)
+        self.nextFrameButton.clicked.connect(self.nextFrame)
 
         self.frameSlider.sliderPressed.connect(self.startTimer)
         self.frameSlider.sliderReleased.connect(self.stopTimer)
@@ -279,6 +281,16 @@ class MultiPageTIFFViewerQt(QWidget):
 
     def stopTimer(self, i=0):
         self.timer.stop()
+
+    def nextFrame(self):
+        i = self.frameSlider.value()
+        self.frameSlider.setValue(i + 1)
+        self.onTimer()
+
+    def prevFrame(self):
+        i = self.frameSlider.value()
+        self.frameSlider.setValue(i - 1)
+        self.onTimer()
 
 
 app = QApplication(sys.argv)
