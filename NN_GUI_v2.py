@@ -72,6 +72,7 @@ class MultiPageTIFFViewerQt(QWidget):
         # Slider and arrow buttons for frame traversal.
         self.sliderBox = QGroupBox()
         self.frameSlider = QSlider(Qt.Horizontal)
+        self.frameSlider.setMinimumHeight(20)
         self.prevFrameButton = QPushButton("<")
         self.nextFrameButton = QPushButton(">")
 
@@ -82,7 +83,6 @@ class MultiPageTIFFViewerQt(QWidget):
         self.currentFrameLabel = QLabel('Frame')
         # progress bar for loading data
         self.progress = QProgressBar(self)
-
 
         self.outputPlot = SATS_GUI()
         pen = pg.mkPen(color='#AAAAAA', style=Qt.DashLine)
@@ -164,7 +164,6 @@ class MultiPageTIFFViewerQt(QWidget):
         # set up the progress bar
         self.progress.setRange(0, frameNum-1)
 
-
         for frame in range(0, self.image_mitoOrig.shape[0]):
             inputData, positions = prepareNNImages(
                 self.image_mitoOrig[frame, :, :],
@@ -183,7 +182,8 @@ class MultiPageTIFFViewerQt(QWidget):
                 i += 1
 
             outputData.append(np.max(self.nnOutput[frame, :, :]))
-            self.maxPos.append(list(zip(*np.where(self.nnOutput == np.max(self.nnOutput)))))
+            self.maxPos.append(list(zip(*np.where(self.nnOutput[frame] == outputData[-1]))))
+            print(self.maxPos[-1])
             self.progress.setValue(frame)
             self.app.processEvents()
 
@@ -256,9 +256,9 @@ class MultiPageTIFFViewerQt(QWidget):
             self.frameLine.setValue(i)
         else:
             self.frameLine.setValue(self.outputPlot.elapsed[i])
-        self.viewer_Orig.cross.setPosition([self.maxPos[i][0][1:3]])
-        self.viewer_Proc.cross.setPosition([self.maxPos[i][0][1:3]])
-        self.viewer_nn.cross.setPosition([self.maxPos[i][0][1:3]])
+        self.viewer_Orig.cross.setPosition([self.maxPos[i][0]])
+        self.viewer_Proc.cross.setPosition([self.maxPos[i][0]])
+        self.viewer_nn.cross.setPosition([self.maxPos[i][0]])
 
     def startTimer(self, i=0):
         self.timer.start()

@@ -109,7 +109,7 @@ def loadTifStack(stack, order=0):
 if __name__ == '__main__':
 
     folder = (
-        'W:\Watchdog\microM_test/201208_cell_Int0s_30pc_488_50pc_561_band_9')
+        'W:/Watchdog/microM_test/201208_cell_Int0s_30pc_488_50pc_561_band_9')
     mito, drp, stackNN = loadTifFolder(folder, 0)
     print(mito.shape)
     plt.imshow(mito[5])
