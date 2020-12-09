@@ -5,8 +5,6 @@ sampling on the iSIM
 
 import glob
 import numpy as np
-import bioformats
-import javabridge
 import os
 import tifffile
 import json
