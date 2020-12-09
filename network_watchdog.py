@@ -268,9 +268,9 @@ class NetworkWatchdog(QWidget):
         s = now_str.strftime("%S")
         ms = now_str.strftime("%f")
         print(ms)
-        tX = int(h)*60*60*1000 + int(m)*60*1000 + int(s)*1000 + int(ms[:2])
+        tX = (int(h)*60*60*1000 + int(m)*60*1000 + int(s)*1000 + int(ms[:2]))/60/60/1000
         print(tX)
-        
+
         lengthCache = 100
         if len(self.outputHistogram) > lengthCache:
             self.outputX = self.outputX[1:]

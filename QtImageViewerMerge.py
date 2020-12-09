@@ -37,7 +37,6 @@ class CrossItem(pg.GraphicsObject):
         painter.end()
 
     def setPosition(self, pos):
-        print(pos)
         pos = QPointF(pos[0][1]+0.5, pos[0][0]+0.5)
         self.setPos(pos)
 

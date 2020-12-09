@@ -58,7 +58,7 @@ class SATS_GUI(QWidget):
 
     frameChanged = pyqtSignal([], [int])
 
-    def __init__(self, app):
+    def __init__(self):
         QWidget.__init__(self)
 
         self.folder = (
@@ -87,9 +87,12 @@ class SATS_GUI(QWidget):
 
         self.frameratePlot = self.Plot.plot([])
         pen = pg.mkPen(color='#FF0000', style=Qt.DashLine)
-        self.thrLine = pg.InfiniteLine(pos=100, angle=0, pen=pen)
-        self.thrLine.hide()
-        self.Plot.addItem(self.thrLine)
+        self.thrLine1 = pg.InfiniteLine(pos=90, angle=0, pen=pen)
+        self.thrLine2 = pg.InfiniteLine(pos=70, angle=0, pen=pen)
+        self.thrLine1.hide()
+        self.thrLine2.hide()
+        self.Plot.addItem(self.thrLine1)
+        self.Plot.addItem(self.thrLine2)
 
         self.scatter = pg.ScatterPlotItem()
         self.scatter.setData(brush='#505050', size=8, pen=None)
@@ -111,17 +114,17 @@ class SATS_GUI(QWidget):
         grid.addWidget(self.Plot, 0, 0)
         # grid.addWidget(self.Plot2, 1, 0)
 
-        self.inc = 0
-        self.app = app
-        self.loadData()
-        self.app.processEvents()
-        self.updatePlot()
+        self.inc = -1
 
-    def loadData(self):
-        self.elapsed = loadElapsedTime(self.folder)
+
+    def loadData(self, folder):
+        self.elapsed = loadElapsedTime(folder)
+        self.elapsed.sort()
         self.elapsed = np.array(self.elapsed[0::2])/1000
-        self.delay = loadiSIMmetadata(self.folder)
-        self.nnData = loadNNData(self.folder)
+        self.delay = loadiSIMmetadata(folder)
+        self.nnData = loadNNData(folder)
+        print(self.elapsed)
+        print(self.delay)
 
     def updatePlot(self):
         if self.inc == 0:
@@ -133,15 +136,19 @@ class SATS_GUI(QWidget):
 
         elif self.inc == 2:
             self.delay = np.append(np.ones(5), self.delay)
-            rect_data = self.delay[0:len(self.elapsed)]
+            rect_data = self.delay[5:len(self.elapsed)]
             # see where the delay value changes
+            print(rect_data)
             changes = np.where(np.roll(rect_data, 1) != rect_data)[0]
+            print(changes)
             # map this frame data to the elapsed time data
-            changes = self.elapsed[changes]
+            changes = self.elapsed[changes+1]
+            changes = np.insert(changes, 0, np.min(self.elapsed))
+            changes = np.append(changes, np.max(self.elapsed))
             for i in range(1, len(changes)):
                 color = '#202020' if i % 2 else '#101010'
                 rect_item = RectItem(QtCore.QRectF(
-                    changes[i-1], 0, changes[i]-changes[i-1], 200), color)
+                    changes[i-1], 0, changes[i]-changes[i-1], np.max(self.nnData[:,1])), color)
                 self.Plot.addItem(rect_item)
                 rect_item.setZValue(-100)
 
@@ -163,14 +170,15 @@ class SATS_GUI(QWidget):
             self.scatter.setData(self.nntimes, self.nnData[:, 1])
 
         elif self.inc == 5:
-            self.thrLine.show()
+            self.thrLine1.show()
+            self.thrLine2.show()
 
         self.Plot.update()
 
     def updateViews(self):
         # view has resized; update auxiliary views to match
         self.p2.setGeometry(self.pI.vb.sceneBoundingRect())
-        print('updateViews run')
+
         # need to re-update linked axes since this was called
         # incorrectly while views had different shapes.
         # (probably this should be handled in ViewBox.resizeEvent)
@@ -182,12 +190,12 @@ class SATS_GUI(QWidget):
             print(self.inc)
         self.updatePlot()
 
+if __name__ == '__main__':
+    QtCore.QRectF()
 
-QtCore.QRectF()
+    app = QApplication(sys.argv)
+    gui = SATS_GUI()
+    gui.loadData('W:\Watchdog\microM_test/201208_cell_Int0s_30pc_488_50pc_561_band_5')
+    gui.show()
 
-app = QApplication(sys.argv)
-gui = SATS_GUI(app)
-
-gui.show()
-
-sys.exit(app.exec_())
+    sys.exit(app.exec_())

@@ -10,11 +10,14 @@ import javabridge
 import os
 import tifffile
 import json
+from skimage import io
+import re
+from matplotlib import pyplot as plt
 
 
 def loadiSIMmetadata(folder):
     delay = []
-    for name in glob.glob(folder + '/iSIMmetadata*.txt'):
+    for name in sorted(glob.glob(folder + '/iSIMmetadata*.txt')):
         data = np.genfromtxt(name)
         # set minimum cycle time
         if data[1] == 0:
@@ -65,8 +68,52 @@ def resaveNN(folder):
         print(filePath)
 
 
+def loadTifFolder(folder, order=0):
+    stack1 = []
+    stack2 = []
+    stackNN = []
+    for filePath in sorted(glob.glob(folder + '/img_*.tif')):
+        splitStr = re.split(r'img_channel\d+_position\d+_time', os.path.basename(filePath))
+        splitStr = re.split(r'_z\d+', splitStr[1])
+        frameNum = int(splitStr[0])
+        print(frameNum)
+        if frameNum % 2:
+            # odd
+            stack1.append(io.imread(filePath))
+            nnPath = filePath[:-8] + 'nn.tiff'
+            try:
+                stackNN.append(io.imread(nnPath))
+            except FileNotFoundError:
+                stackNN.append(np.zeros_like(stack1[0]))
+
+        else:
+            stack2.append(io.imread(filePath))
+    if order == 0:
+        stack1 = np.array(stack1)
+        stack2 = np.array(stack2)
+    else:
+        stack1_save = stack1
+        stack1 = np.array(stack2)
+        stack2 = np.array(stack1_save)
+    print(stack1.shape)
+    return stack1, stack2, stackNN
+
+
+def loadTifStack(stack, order=0):
+    start1 = order
+    start2 = np.abs(order-1)
+    image_mitoOrig = io.imread(stack)
+    stack1 = image_mitoOrig[start1::2]
+    stack2 = image_mitoOrig[start2::2]
+    return stack1, stack2
+
+
 if __name__ == '__main__':
 
     folder = (
-        'C:/Users/stepp/Documents/data_raw/SmartMito/microM_test/cell_Int5s_30pc_488_50pc_561_5')
+        'W:\Watchdog\microM_test/201208_cell_Int0s_30pc_488_50pc_561_band_9')
+    mito, drp, stackNN = loadTifFolder(folder, 0)
+    print(mito.shape)
+    plt.imshow(mito[5])
+    plt.show()
     print('Done')
