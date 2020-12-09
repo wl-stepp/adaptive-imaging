@@ -66,26 +66,56 @@ def resaveNN(folder):
         print(filePath)
 
 
-def loadTifFolder(folder, order=0):
-    stack1 = []
-    stack2 = []
-    stackNN = []
-    for filePath in sorted(glob.glob(folder + '/img_*.tif')):
+def loadTifFolder(folder, resizeParam=1, order=0, progress=None, app=None):
+    """Function to load SATS data from a folder with the individual tif files written by
+    microManager. Inbetween there might be neural network images that are also loaded into
+    an array. Mainly used with NN_GUI_v2.py
+
+    Args:
+        folder ([type]): Folder with the data inside
+        resizeParam (int, optional): Parameter that the loaded images are shrunken to later. This
+        is also the size of the neural network images. Defaults to 1.
+        order (int, optional): Order of the data. In the original case mito/Drp. Defaults to 0.
+        progress ([type], optional): Link to a progress bar in the calling app. Defaults to None.
+        app ([type], optional): Link to the calling app in order to keep it responsive using
+        app.processEvents after each frame. Defaults to None.
+
+    Returns:
+        stack1 (numpy.array): stack of data depending on order
+        stack2 (numpy.array): stack of data depending on order
+        stackNN (numpy.array): stack of available network output, with zeros where no file was found
+    """
+    FileList = sorted(glob.glob(folder + '/img_*.tif'))
+    numFrames = int(len(FileList)/2)
+    pixelSize = io.imread(FileList[0]).shape
+    stack1 = np.zeros((numFrames, pixelSize[0], pixelSize[1]))
+    stack2 = np.zeros((numFrames, pixelSize[0], pixelSize[1]))
+    postSize = round(pixelSize[0]*resizeParam)
+    stackNN = np.zeros((numFrames,  postSize, postSize))
+    frame = 0
+    progress.setRange(0, numFrames*2)
+    for filePath in FileList:
         splitStr = re.split(r'img_channel\d+_position\d+_time', os.path.basename(filePath))
         splitStr = re.split(r'_z\d+', splitStr[1])
         frameNum = int(splitStr[0])
-        print(frameNum)
         if frameNum % 2:
             # odd
-            stack1.append(io.imread(filePath))
+            stack1[frame] = io.imread(filePath)
             nnPath = filePath[:-8] + 'nn.tiff'
             try:
-                stackNN.append(io.imread(nnPath))
+                stackNN[frame] = io.imread(nnPath)
             except FileNotFoundError:
-                stackNN.append(np.zeros_like(stack1[0]))
-
+                pass
+            frame = frame + 1
         else:
-            stack2.append(io.imread(filePath))
+            stack2[frame] = io.imread(filePath)
+
+        if app is not None:
+            app.processEvents()
+        # Progress the bar if available
+        if progress is not None:
+            progress.setValue(frameNum)
+
     if order == 0:
         stack1 = np.array(stack1)
         stack2 = np.array(stack2)

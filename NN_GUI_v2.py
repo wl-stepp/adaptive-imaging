@@ -81,6 +81,7 @@ class MultiPageTIFFViewerQt(QWidget):
         self.dataButton = QPushButton("load data")
         self.orderButton = QPushButton("order: Drp first")
         self.currentFrameLabel = QLabel('Frame')
+        self.LoadingStatusLabel = QLabel('')
         # progress bar for loading data
         self.progress = QProgressBar(self)
 
@@ -113,11 +114,12 @@ class MultiPageTIFFViewerQt(QWidget):
         gridprogress.setContentsMargins(0, 0, 0, 0)
 
         gridBox = QGridLayout(self.loadBox)
-        gridBox.addWidget(self.currentFrameLabel, 1, 0)
-        gridBox.addWidget(self.progress, 1, 1)
         gridBox.addWidget(self.modelButton, 0, 0)
         gridBox.addWidget(self.dataButton, 0, 1)
         gridBox.addWidget(self.orderButton, 0, 2)
+        gridBox.addWidget(self.LoadingStatusLabel, 1, 0, 1, 3)
+        gridBox.addWidget(self.progress, 2, 0, 1, 3)
+        gridBox.addWidget(self.currentFrameLabel, 3, 0)
 
         self.resize(1500, 1000)
 
@@ -140,11 +142,12 @@ class MultiPageTIFFViewerQt(QWidget):
         # order 0 is mito first
         fname = QFileDialog.getOpenFileName(
             self, 'Open file', 'C:/Users/stepp/Documents/data_raw/SmartMito/')
+        self.LoadingStatusLabel.setText('Loading images from files into arrays')
         if not re.match(r'img_channel\d+_position\d+_time', os.path.basename(fname[0])) is None:
             print("Folder mode")
             self.mode = 'folder'
             self.image_drpOrig, self.image_mitoOrig, self.nnOutput = loadTifFolder(
-                os.path.dirname(fname[0]), self.order)
+                os.path.dirname(fname[0]), resizeParam, self.order, self.progress, app)
         else:
             self.mode = 'stack'
             print("Stack mode")
@@ -161,20 +164,32 @@ class MultiPageTIFFViewerQt(QWidget):
         self.drpDataFull = np.zeros_like(self.nnOutput)
         outputData = []
         self.maxPos = []
+        self.nnRecalculated = np.zeros(frameNum)
         # set up the progress bar
         self.progress.setRange(0, frameNum-1)
 
+        self.LoadingStatusLabel.setText('Processing frames and running the network')
         for frame in range(0, self.image_mitoOrig.shape[0]):
             inputData, positions = prepareNNImages(
                 self.image_mitoOrig[frame, :, :],
                 self.image_drpOrig[frame, :, :], nnImageSize)
-            output_predict = self.model.predict_on_batch(inputData)
+
+            # Do the NN calculation if there is not already a file there
+            if self.model == 'folder' and np.max(self.nnOutput[frame]) > 0:
+                nnDataPres = 1
+                pass
+            else:
+                nnDataPres = 0
+                output_predict = self.model.predict_on_batch(inputData)
+                self.nnRecalculated[frame] = 1
+
             i = 0
             st = positions['stitch']
             st1 = None if st == 0 else -st
             for p in positions['px']:
-                self.nnOutput[frame, p[0]+st:p[2]-st, p[1]+st:p[3]-st] =\
-                            output_predict[i, st:st1, st:st1, 0]
+                if nnDataPres == 0:
+                    self.nnOutput[frame, p[0]+st:p[2]-st, p[1]+st:p[3]-st] =\
+                                output_predict[i, st:st1, st:st1, 0]
                 self.mitoDataFull[frame, p[0]+st:p[2]-st, p[1]+st:p[3]-st] = \
                     inputData[i, st:st1, st:st1, 0]
                 self.drpDataFull[frame, p[0]+st:p[2]-st, p[1]+st:p[3]-st] = \
@@ -183,16 +198,16 @@ class MultiPageTIFFViewerQt(QWidget):
 
             outputData.append(np.max(self.nnOutput[frame, :, :]))
             self.maxPos.append(list(zip(*np.where(self.nnOutput[frame] == outputData[-1]))))
-            print(self.maxPos[-1])
             self.progress.setValue(frame)
             self.app.processEvents()
 
-        print(self.image_mitoOrig.shape)
-        image_drpOrigScaled = []
-        image_mitoOrigScaled = []
+        self.LoadingStatusLabel.setText('Resize the original frames to fit the output')
+        print(postSize)
+        image_drpOrigScaled = np.zeros((self.image_drpOrig.shape[0], postSize, postSize))
+        image_mitoOrigScaled = np.zeros((self.image_drpOrig.shape[0], postSize, postSize))
         for i in range(0, self.image_mitoOrig.shape[0]):
-            image_drpOrigScaled.append(transform.rescale(self.image_drpOrig[i], resizeParam))
-            image_mitoOrigScaled.append(transform.rescale(self.image_mitoOrig[i], resizeParam))
+            image_drpOrigScaled[i] = transform.rescale(self.image_drpOrig[i], resizeParam)
+            image_mitoOrigScaled[i] = transform.rescale(self.image_mitoOrig[i], resizeParam)
             self.progress.setValue(i)
             self.app.processEvents()
         self.image_drpOrig = np.array(image_drpOrigScaled)
@@ -221,18 +236,17 @@ class MultiPageTIFFViewerQt(QWidget):
         self.frameSlider.setMaximum(self.nnOutput.shape[0]-1)
 
         self.onTimer()
-        print('Done loading Images')
+        self.LoadingStatusLabel.setText('Done')
         self.viewer_Proc.vb.setRange(xRange=(0, postSize), yRange=(0, postSize))
 
     def loadModel(self):
-        folder = 'C:/Users/stepp/Documents/data_raw/SmartMito/'
-        model_path = folder + 'model_Dora.h5'
+        self.LoadingStatusLabel.setText('Loading Model')
         fname = QFileDialog.getOpenFileName(
             self, 'Open file', 'C:/Users/stepp/Documents/data_raw/SmartMito/',
             "Keras models (*.h5)")
         print(fname[0])
         self.model = keras.models.load_model(fname[0], compile=True)
-        print('Model compiled')
+        self.LoadingStatusLabel.setText('Done')
 
     def orderChange(self):
         if self.order == 0:
