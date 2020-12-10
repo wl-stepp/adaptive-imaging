@@ -40,14 +40,24 @@ def loadTIF(folder):
         tif.close()
 
 
-def loadElapsedTime(folder):
+def loadElapsedTime(folder, progress=None, app=None):
     elapsed = []
+    FileList = glob.glob(folder + '/img_*.tif')
+    numFrames = int(len(FileList)/2)
+    progress.setRange(0, numFrames*2)
+    i = 0
     for filePath in glob.glob(folder + '/img_*.tif'):
         with tifffile.TiffFile(filePath) as tif:
             md = tif.imagej_metadata
             mdInfo = md['Info']
             mdInfoDict = json.loads(mdInfo)
             elapsed.append(mdInfoDict['ElapsedTime-ms'])
+    if app is not None:
+        app.processEvents()
+    # Progress the bar if available
+    if progress is not None:
+        progress.setValue(i)
+    i = i + 1
     return elapsed
 
 

@@ -49,18 +49,18 @@ class MultiPageTIFFViewerQt(QWidget):
         self.viewer_Orig = QtImageViewerMerge()
         self.imageDrpOrig = self.viewer_Orig.addImage()
         self.imageMitoOrig = self.viewer_Orig.addImage()
-        self.viewer_Orig.setLookupTable(self.imageDrpOrig, 'viridis', False)
-        self.viewer_Orig.setLookupTable(self.imageMitoOrig, 'hot', True)
+        self.viewer_Orig.setLUT(self.imageDrpOrig, 'viridis', False)
+        self.viewer_Orig.setLUT(self.imageMitoOrig, 'thermal', True)
 
         self.viewer_Proc = QtImageViewerMerge()
         self.imageDrpProc = self.viewer_Proc.addImage()
         self.imageMitoProc = self.viewer_Proc.addImage()
-        self.viewer_Proc.setLookupTable(self.imageDrpProc, 'viridis', False)
-        self.viewer_Proc.setLookupTable(self.imageMitoProc, 'hot', True)
+        self.viewer_Proc.setLUT(self.imageDrpProc, 'viridis', False)
+        self.viewer_Proc.setLUT(self.imageMitoProc, 'thermal', True)
 
         self.viewer_nn = QtImageViewerMerge()
         self.imageNN = self.viewer_nn.addImage()
-        self.viewer_nn.setLookupTable(self.imageNN, 'inferno', True)
+        self.viewer_nn.setLUT(self.imageNN, 'inferno', True)
         self.loadBox = QGroupBox()
 
         # Connect the viewers
@@ -86,6 +86,7 @@ class MultiPageTIFFViewerQt(QWidget):
         self.progress = QProgressBar(self)
 
         self.outputPlot = SATS_GUI()
+
         pen = pg.mkPen(color='#AAAAAA', style=Qt.DashLine)
         self.frameLine = pg.InfiniteLine(pos=0.5, angle=90, pen=pen)
         self.outputPlot.pI.addItem(self.frameLine)
@@ -123,11 +124,9 @@ class MultiPageTIFFViewerQt(QWidget):
         gridBox.addWidget(self.progress, 2, 0, 1, 3)
         gridBox.addWidget(self.currentFrameLabel, 3, 0)
 
-        self.resize(1500, 1000)
-
         self.timer = QTimer()
         self.timer.timeout.connect(self.onTimer)
-        self.timer.setInterval(33)
+        self.timer.setInterval(20)
 
         self.app = app
         self.order = 1
@@ -217,26 +216,28 @@ class MultiPageTIFFViewerQt(QWidget):
         print(self.image_mitoOrig.shape)
 
         # Make a rolling mean of the output Data
-        N = 10
-        outputDataSmooth = np.ones(len(outputData))
-        outputDataSmooth[0:N] = np.ones(N)*np.mean(outputData[0:N])
-        for x in range(N, len(outputData)):
-            outputDataSmooth[x] = np.sum(outputData[x-N:x])/N
+        # N = 10
+        # outputDataSmooth = np.ones(len(outputData))
+        # outputDataSmooth[0:N] = np.ones(N)*np.mean(outputData[0:N])
+        # for x in range(N, len(outputData)):
+        #     outputDataSmooth[x] = np.sum(outputData[x-N:x])/N
 
-        pen = pg.mkPen(color=(192, 251, 255), width=1)
-        pen2 = pg.mkPen(color=(151, 0, 26), width=3)
-        pen3 = pg.mkPen(color=(148, 155, 0), width=3)
         if self.mode == 'stack':
-            self.outputPlot.pI.plot(outputData, pen=pen)
-            self.outputPlot.pI.plot(outputDataSmooth, pen=pen2)
+            self.outputPlot.deleteRects()
+            self.outputPlot.frames.setData([])
+            self.outputPlot.nnframeScatter.setData([])
+            self.outputPlot.nnline.setData(outputData)
+            self.outputPlot.scatter.setData(range(0, len(outputData)), outputData)
         else:
-            self.outputPlot.loadData(os.path.dirname(fname[0]))
-            for i in range(0, 6):
+            self.LoadingStatusLabel.setText('Getting the timing data')
+            self.outputPlot.loadData(os.path.dirname(fname[0]), self.progress, self.app)
+            for i in range(-1, 6):
                 self.outputPlot.inc = i
                 self.outputPlot.updatePlot()
-        # self.outputPlot.plot(outputData-outputDataSmooth, pen=pen3)
+
         self.frameSlider.setMaximum(self.nnOutput.shape[0]-1)
 
+        self.refreshGradients()
         self.onTimer()
         self.LoadingStatusLabel.setText('Done')
         self.viewer_Proc.vb.setRange(xRange=(0, postSize), yRange=(0, postSize))
@@ -276,6 +277,13 @@ class MultiPageTIFFViewerQt(QWidget):
         self.viewer_Proc.cross.setPosition([self.maxPos[i][0]])
         self.viewer_nn.cross.setPosition([self.maxPos[i][0]])
 
+    def refreshGradients(self):
+        self.viewer_Orig.setImage(self.image_mitoOrig[0], 1)
+        self.viewer_Orig.setImage(self.image_drpOrig[0], 0)
+        self.viewer_Proc.setImage(self.mitoDataFull[0], 1)
+        self.viewer_Proc.setImage(self.drpDataFull[0], 0)
+        self.viewer_nn.setImage(self.nnOutput[0], 0)
+
     def startTimer(self, i=0):
         self.timer.start()
 
@@ -297,5 +305,5 @@ app = QApplication(sys.argv)
 # app.setAttribute(QtCore.Qt.AA_Use96Dpi)
 stackViewer = MultiPageTIFFViewerQt(app)
 
-stackViewer.show()
+stackViewer.showMaximized()
 sys.exit(app.exec_())

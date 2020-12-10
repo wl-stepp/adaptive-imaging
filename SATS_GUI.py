@@ -94,9 +94,10 @@ class SATS_GUI(QWidget):
         self.Plot.addItem(self.thrLine1)
         self.Plot.addItem(self.thrLine2)
 
-        self.scatter = pg.ScatterPlotItem()
-        self.scatter.setData(brush='#505050', size=8, pen=None)
+        self.scatter = pg.ScatterPlotItem(brush='#505050', size=8, pen=pg.mkPen(color='#303030'))
+        self.nnline = pg.PlotCurveItem([], pen=pg.mkPen(color='#303030'))
         self.Plot.addItem(self.scatter)
+        self.Plot.addItem(self.nnline)
 
         # adapt for presentation
         labelStyle = {'color': '#AAAAAA', 'font-size': '20pt'}
@@ -115,9 +116,10 @@ class SATS_GUI(QWidget):
         # grid.addWidget(self.Plot2, 1, 0)
 
         self.inc = -1
+        self.rects = []
 
-    def loadData(self, folder):
-        self.elapsed = loadElapsedTime(folder)
+    def loadData(self, folder, progress, app):
+        self.elapsed = loadElapsedTime(folder, progress, app)
         self.elapsed.sort()
         self.elapsed = np.array(self.elapsed[0::2])/1000
         self.delay = loadiSIMmetadata(folder)
@@ -146,6 +148,8 @@ class SATS_GUI(QWidget):
                 color = '#202020' if i % 2 else '#101010'
                 rect_item = RectItem(QtCore.QRectF(
                     changes[i-1], 0, changes[i]-changes[i-1], np.max(self.nnData[:, 1])), color)
+
+                self.rects.append(rect_item)
                 self.Plot.addItem(rect_item)
                 rect_item.setZValue(-100)
 
@@ -162,13 +166,15 @@ class SATS_GUI(QWidget):
             # self.Plot.plot(self.elapsed, self.delay[0:len(self.elapsed)]*150)
             self.nnframes = ((self.nnData[:, 0] - 1) / 2).astype(np.uint16)
             self.nntimes = self.elapsed[self.nnframes]
-            pen = pg.mkPen(color='#303030')
-            self.Plot.plot(self.nntimes, self.nnData[:, 1], pen=pen)
+            self.nnline.setData(self.nntimes, self.nnData[:, 1])
             self.scatter.setData(self.nntimes, self.nnData[:, 1])
 
         elif self.inc == 5:
             self.thrLine1.show()
             self.thrLine2.show()
+
+        elif self.inc == 10:
+            self.deleteRects()
 
         self.Plot.update()
 
@@ -186,6 +192,12 @@ class SATS_GUI(QWidget):
             self.inc = self.inc + 1
             print(self.inc)
         self.updatePlot()
+
+    def deleteRects(self):
+        for rect in self.rects:
+            self.Plot.removeItem(rect)
+            del rect
+        self.rects = []
 
 
 if __name__ == '__main__':
