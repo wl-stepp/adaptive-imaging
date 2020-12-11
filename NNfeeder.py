@@ -1,14 +1,16 @@
 
-from skimage import filters, exposure, io, transform
-import scipy
-import numpy as np
-from imageTiles import getTilePositions_v2
 import time
+
 import cv2
-import tensorflow_addons as tfa
-import tensorflow as tf
-import tensorflow_probability as tfp
 import matplotlib.pyplot as plt
+import numpy as np
+import scipy
+import tensorflow as tf
+import tensorflow_addons as tfa
+import tensorflow_probability as tfp
+from skimage import exposure, filters, io, transform
+
+from imageTiles import getTilePositions_v2
 
 
 def prepareNNImages(mitoFull, drpFull, nnImageSize):
@@ -38,6 +40,7 @@ def prepareNNImages(mitoFull, drpFull, nnImageSize):
         drpFull = (filters.gaussian(drpFull, sig, preserve_range=True)
                    - filters.gaussian(drpFull, sig*5, preserve_range=True))
         t2 = time.perf_counter()
+
 
         # Contrast
         drpFull = exposure.rescale_intensity(

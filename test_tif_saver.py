@@ -8,13 +8,13 @@ Application to read a h5 file and save a tif from it at 2Hz to test the
 watchdog on lebpc20
 """
 
-import time
-import numpy as np
-import matplotlib.pyplot as plt
-import h5py
-from skimage import io
-import os
 import glob
+import os
+import time
+
+import h5py
+import numpy as np
+from skimage import io
 
 data_path = 'C:/Users/stepp/Documents/data_raw/SmartMito/'  # nb: begin with /
 print('data_path : ', data_path)

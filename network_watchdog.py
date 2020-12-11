@@ -14,43 +14,29 @@ image to a NAS location, that should be observed, read and analysed. The binary
 output will go to the same NAS and is expected to be read by a Matlab program
 that runs on the same machine as microManager.
 """
-# Standard
-import time
-import numpy as np
+
 import os
-import glob
 import re  # Regular expression module
-from datetime import datetime
 import sys
+from datetime import datetime
 
-# Watchdog
-from watchdog.observers import Observer
-from watchdog.events import PatternMatchingEventHandler
-
-# Plotting
-from matplotlib import cm
-from skimage import io, exposure, filters
-
+import numpy as np
+import pyqtgraph as pg
+# Qt display imports
+from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtWidgets import QApplication, QGridLayout, QWidget
+from skimage import io
 # Tensorflow
 from tensorflow import keras
-import tensorflow as tf
-# from PIL import Image
+from watchdog.events import PatternMatchingEventHandler
+# Watchdog
+from watchdog.observers import Observer
 
+from binOutput import write_bin
+# from imageTiles import getTilePositions_v2
 # Own modules
 from NNfeeder import prepareNNImages
-from imageTiles import getTilePositions_v2
-from binOutput import write_bin
-
-# Qt display imports
-from PyQt5.QtCore import Qt, pyqtSignal, QT_VERSION_STR, QTimer, QRectF, QRect
-from PyQt5.QtWidgets import QWidget, QSlider, QPushButton, QLabel,\
-    QGridLayout, QFileDialog, QProgressBar, QGroupBox, QApplication, QStyleOptionGraphicsItem
-from PyQt5.QtGui import QColor, QBrush, QPen, QMovie, qRgb, QImage
-import pyqtgraph as pg
-from QtImageViewer import QtImageViewer
 from QtImageViewerMerge import QtImageViewerMerge
-from qimage2ndarray import array2qimage, gray2qimage
-from QtToolbox import getQtcolormap
 
 
 class NetworkWatchdog(QWidget):
@@ -59,7 +45,7 @@ class NetworkWatchdog(QWidget):
     refreshGUI = pyqtSignal([], [int])
     reinitGUI = pyqtSignal(int)
 
-    def __init__(self, app):
+    def __init__(self):
 
         # Setting for the watchdogs
         patterns = ["*.tif"]
@@ -117,10 +103,10 @@ class NetworkWatchdog(QWidget):
 
         # More settings for the Watchdos
         path = "//lebnas1.epfl.ch/microsc125/Watchdog/"
-        go_recursively = True
+        goRecursively = True
         self.my_observer = Observer()
         self.my_observer.schedule(
-            my_event_handler, path, recursive=go_recursively)
+            my_event_handler, path, recursive=goRecursively)
 
         # Init the model by running it once
         print('Initialize the model')
@@ -130,6 +116,14 @@ class NetworkWatchdog(QWidget):
         self.my_observer.start()
 
         print('All loaded, running...')
+
+        #Init variables
+        self.mitoDataFull = None
+        self.drpDataFull = None
+        self.outputHistogram = None
+        self.outputX = None
+        self.maxPos = None
+
 
         self.frameNumOld = 100
         self.inputSizeOld = 0
@@ -285,7 +279,7 @@ class NetworkWatchdog(QWidget):
         f.write('%d, %d\n' % (frameNum, output))
         f.close()
         # Save the nn image
-        io.imsave(nn_path, self.outputDataFull, check_contrast=False)
+        io.imsave(nn_path, self.outputDataFull.astype(np.uint8), check_contrast=False)
 
         # Prepare images for plot and emit plotting event
         # self.mitoDisp = gray2qimage(self.mitoDataFull, normalize=True)
@@ -302,7 +296,7 @@ class NetworkWatchdog(QWidget):
         self.folderNameOld = folderName
         print('output generated   ', int(output), '\n')
 
-    def refresh_GUI(self, event=0):
+    def refresh_GUI(self):
         self.imageMito.setImage(self.mitoDataFull)
         self.imageDrp.setImage(self.drpDataFull)
         self.imageNN.setImage(self.outputDataFull)
@@ -312,30 +306,36 @@ class NetworkWatchdog(QWidget):
         self.viewerOutput.enableAutoRange()
 
     def reinitialize_GUI(self, inputSize):
-        positions = getTilePositions_v2(
-                np.ones((inputSize, inputSize)), self.nnImageSize)
+        # This was used to draw a grid on the ViewBox that shows the tiling. Will have to redo for
+        # the new plotting environment
+        # positions = getTilePositions_v2(
+        #         np.ones((inputSize, inputSize)), self.nnImageSize)
 
-        for viewer in self.imageViewer:
-            for line in viewer.lines:
-                viewer.scene.removeItem(line)
-            viewer.lines = []
+        # for viewer in self.imageViewer:
+        #     for line in viewer.lines:
+        #         viewer.scene.removeItem(line)
+        #     viewer.lines = []
 
-            for line in viewer.lines:
-                line.setPen(self.linePen)
-                line.setZValue(100)
+        #     for line in viewer.lines:
+        #         line.setPen(self.linePen)
+        #         line.setZValue(100)
         self.viewerMerge.vb.setRange(xRange=(0, inputSize), yRange=(0, inputSize))
 
     def on_moved(self, event):
         pass
 
-    def closeEvent(self, event):
+    def closeEvent(self):
         print('Watchdogs stopped')
         self.my_observer.stop()
         self.my_observer.join()
 
 
-app = QApplication(sys.argv)
-Watchdog = NetworkWatchdog(app)
+def main():
+    app = QApplication(sys.argv)
+    Watchdog = NetworkWatchdog(app)
 
-Watchdog.show()
-sys.exit(app.exec_())
+    Watchdog.show()
+    sys.exit(app.exec_())
+
+if __name__ == '__main__':
+    main()

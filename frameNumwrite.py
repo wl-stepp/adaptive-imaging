@@ -1,10 +1,11 @@
-import time
-from watchdog.observers import Observer
-from watchdog.events import PatternMatchingEventHandler
 import os
 import re
-from binOutput import write_bin
+import time
 
+from watchdog.events import PatternMatchingEventHandler
+from watchdog.observers import Observer
+
+from binOutput import write_bin
 
 if __name__ == "__main__":
     patterns = ["*.tif"]
@@ -38,7 +39,7 @@ def on_created(event):
         frameNumOld = frameNum
 
 
-def on_deleted(event):
+def on_deleted():
     write_bin(0, 0, os.path.dirname(modelPath))
     print(0, ' written')
 

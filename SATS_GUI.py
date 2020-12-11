@@ -1,20 +1,16 @@
-from PyQt5.QtCore import Qt, pyqtSignal, QT_VERSION_STR, QTimer
-from PyQt5.QtWidgets import QWidget, QSlider, QPushButton, QLabel,\
-    QGridLayout, QFileDialog, QProgressBar, QGroupBox, QApplication
-from PyQt5 import QtCore, QtGui, QtWidgets, uic
-from PyQt5.QtGui import QColor, QBrush, QPen, QMovie
-import pyqtgraph as pg
-from skimage import io
-from QtImageViewer import QtImageViewer
-from qimage2ndarray import array2qimage
 import sys
-import os
-import time
-import numpy as np
 
-from nnIO import loadiSIMmetadata, loadElapsedTime, loadNNData
+import numpy as np
+import pyqtgraph as pg
+from PyQt5 import QtCore, QtGui
+from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtWidgets import QApplication, QGridLayout, QWidget
+
+from nnIO import loadElapsedTime, loadiSIMmetadata, loadNNData
+
 # Adjust for different screen sizes
 QApplication.setAttribute(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+
 
 
 class RectItem(pg.GraphicsObject):
@@ -36,8 +32,8 @@ class RectItem(pg.GraphicsObject):
         painter.drawRect(self.rect)
         painter.end()
 
-    def paint(self, painter, option, widget=None):
-        painter.drawPicture(0, 0, self.picture)
+    def paint(self, *painter):
+        painter[0].drawPicture(0, 0, self.picture)
 
     def boundingRect(self):
         return QtCore.QRectF(self.picture.boundingRect())
@@ -115,10 +111,15 @@ class SATS_GUI(QWidget):
         grid.addWidget(self.Plot, 0, 0)
         # grid.addWidget(self.Plot2, 1, 0)
 
+        self.elapsed = None
+        self.delay = None
+        self.nnData = None
+        self.nnframes = None
+        self.nntimes = None
         self.inc = -1
         self.rects = []
 
-    def loadData(self, folder, progress, app):
+    def loadData(self, folder, progress=None, app=None):
         self.elapsed = loadElapsedTime(folder, progress, app)
         self.elapsed.sort()
         self.elapsed = np.array(self.elapsed[0::2])/1000
@@ -137,21 +138,21 @@ class SATS_GUI(QWidget):
 
         elif self.inc == 2:
             self.delay = np.append(np.ones(5), self.delay)
-            rect_data = self.delay[5:len(self.elapsed)]
+            rectData = self.delay[5:len(self.elapsed)]
             # see where the delay value changes
-            changes = np.where(np.roll(rect_data, 1) != rect_data)[0]
+            changes = np.where(np.roll(rectData, 1) != rectData)[0]
             # map this frame data to the elapsed time data
             changes = self.elapsed[changes+1]
             changes = np.insert(changes, 0, np.min(self.elapsed))
             changes = np.append(changes, np.max(self.elapsed))
             for i in range(1, len(changes)):
                 color = '#202020' if i % 2 else '#101010'
-                rect_item = RectItem(QtCore.QRectF(
+                rectItem = RectItem(QtCore.QRectF(
                     changes[i-1], 0, changes[i]-changes[i-1], np.max(self.nnData[:, 1])), color)
 
-                self.rects.append(rect_item)
-                self.Plot.addItem(rect_item)
-                rect_item.setZValue(-100)
+                self.rects.append(rectItem)
+                self.Plot.addItem(rectItem)
+                rectItem.setZValue(-100)
 
         elif self.inc == 3:
             self.nnPlotItem.hide()
@@ -200,12 +201,13 @@ class SATS_GUI(QWidget):
         self.rects = []
 
 
-if __name__ == '__main__':
-    QtCore.QRectF()
-
+def main():
     app = QApplication(sys.argv)
     gui = SATS_GUI()
-    gui.loadData('W:/Watchdog/microM_test/201208_cell_Int0s_30pc_488_50pc_561_band_5')
+    gui.loadData('W:/Watchdog/microM_test/201208_cell_Int0s_30pc_488_50pc_561_band_5', None)
     gui.show()
 
     sys.exit(app.exec_())
+
+if __name__ == '__main__':
+    main()

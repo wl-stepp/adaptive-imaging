@@ -8,10 +8,11 @@ Application to write a value to a file in a remote location as fast as possible
 
 """
 
-import time
-import numpy
-from datetime import datetime
 import os.path as ospath
+import time
+from datetime import datetime
+
+import numpy
 
 if __name__ == "__main__":
     path = "//lebnas1.epfl.ch/microsc125/Watchdog/"

@@ -4,13 +4,14 @@ sampling on the iSIM
 '''
 
 import glob
-import numpy as np
-import os
-import tifffile
 import json
-from skimage import io
+import os
 import re
+
+import numpy as np
+import tifffile
 from matplotlib import pyplot as plt
+from skimage import io
 
 
 def loadiSIMmetadata(folder):
@@ -22,7 +23,7 @@ def loadiSIMmetadata(folder):
             data[1] = 0.2
         numFrames = int(data[2])
         delay = np.append(delay, np.ones(numFrames)*data[1])
-
+    print(delay)
     return delay
 
 
@@ -30,26 +31,23 @@ def loadTIF(folder):
     file = 'img_channel000_position000_time000000001_z000.tif'
     filePath = folder + '/' + file
 
-    with tifffile.TiffFile(filePath) as tif:
-        data3 = tif.imagej_metadata
-        info = data3['Info']
-        dic = tif.__dict__
-        info_dict = json.loads(info)
-        print(info_dict['ElapsedTime-ms'])
-
-        tif.close()
+    tif = tifffile.TiffFile(filePath)
+    info = tif.imagej_metadata['Info']  # pylint: disable=E1136  # pylint/issues/3139
+    infoDict = json.loads(info)
+    print(infoDict['ElapsedTime-ms'])
+    tif.close()
 
 
 def loadElapsedTime(folder, progress=None, app=None):
     elapsed = []
-    FileList = glob.glob(folder + '/img_*.tif')
-    numFrames = int(len(FileList)/2)
-    progress.setRange(0, numFrames*2)
+    fileList = glob.glob(folder + '/img_*.tif')
+    numFrames = int(len(fileList)/2)
+    if progress is not None:
+        progress.setRange(0, numFrames*2)
     i = 0
     for filePath in glob.glob(folder + '/img_*.tif'):
         with tifffile.TiffFile(filePath) as tif:
-            md = tif.imagej_metadata
-            mdInfo = md['Info']
+            mdInfo = tif.imagej_metadata['Info']  # pylint: disable=E1136  # pylint/issues/3139
             mdInfoDict = json.loads(mdInfo)
             elapsed.append(mdInfoDict['ElapsedTime-ms'])
     if app is not None:
@@ -95,16 +93,17 @@ def loadTifFolder(folder, resizeParam=1, order=0, progress=None, app=None):
         stack2 (numpy.array): stack of data depending on order
         stackNN (numpy.array): stack of available network output, with zeros where no file was found
     """
-    FileList = sorted(glob.glob(folder + '/img_*.tif'))
-    numFrames = int(len(FileList)/2)
-    pixelSize = io.imread(FileList[0]).shape
+    fileList = sorted(glob.glob(folder + '/img_*.tif'))
+    numFrames = int(len(fileList)/2)
+    pixelSize = io.imread(fileList[0]).shape
     stack1 = np.zeros((numFrames, pixelSize[0], pixelSize[1]))
     stack2 = np.zeros((numFrames, pixelSize[0], pixelSize[1]))
-    postSize = round(pixelSize[0]*resizeParam)
+    postSize = round(pixelSize[1]*resizeParam)
     stackNN = np.zeros((numFrames,  postSize, postSize))
     frame = 0
-    progress.setRange(0, numFrames*2)
-    for filePath in FileList:
+    if progress is not None:
+        progress.setRange(0, numFrames*2)
+    for filePath in fileList:
         splitStr = re.split(r'img_channel\d+_position\d+_time', os.path.basename(filePath))
         splitStr = re.split(r'_z\d+', splitStr[1])
         frameNum = int(splitStr[0])
@@ -140,18 +139,20 @@ def loadTifFolder(folder, resizeParam=1, order=0, progress=None, app=None):
 def loadTifStack(stack, order=0):
     start1 = order
     start2 = np.abs(order-1)
-    image_mitoOrig = io.imread(stack)
-    stack1 = image_mitoOrig[start1::2]
-    stack2 = image_mitoOrig[start2::2]
+    imageMitoOrig = io.imread(stack)
+    stack1 = imageMitoOrig[start1::2]
+    stack2 = imageMitoOrig[start2::2]
     return stack1, stack2
 
 
-if __name__ == '__main__':
-
+def main():
     folder = (
-        'W:/Watchdog/microM_test/201208_cell_Int0s_30pc_488_50pc_561_band_9')
-    mito, drp, stackNN = loadTifFolder(folder, 0)
-    print(mito.shape)
-    plt.imshow(mito[5])
+        'W:/Watchdog/microM_test/201208_cell_Int0s_30pc_488_50pc_561_band_9_nodecon')
+    stack1 = loadTifFolder(folder, 512/741, 0)[0]
+    print(stack1.shape)
+    plt.imshow(stack1[5])
     plt.show()
     print('Done')
+
+if __name__ == '__main__':
+    main()

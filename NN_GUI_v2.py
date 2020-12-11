@@ -9,27 +9,24 @@ Created on Mon Oct  5 12:18:48 2020
 
 @author: stepp
 """
-from PyQt5.QtCore import Qt, pyqtSignal, QT_VERSION_STR, QTimer
-from PyQt5.QtWidgets import QWidget, QSlider, QPushButton, QLabel,\
-    QGridLayout, QFileDialog, QProgressBar, QGroupBox, QApplication
-from PyQt5.QtGui import QColor, QBrush, QPen, QMovie, qRgb
-import pyqtgraph as pg
-from skimage import io, transform
-from QtImageViewer import QtImageViewer
-from qimage2ndarray import array2qimage
-import sys
-import time
-import numpy as np
-from NNfeeder import prepareNNImages
-from imageTiles import getTilePositions_v2
-from tensorflow import keras
-from matplotlib import cm
-from QtImageViewerMerge import QtImageViewerMerge
-from nnIO import loadTifStack, loadTifFolder
-import re
 import os
+import re
+import sys
+
+import numpy as np
+import pyqtgraph as pg
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal
+from PyQt5.QtWidgets import (QApplication, QFileDialog, QGridLayout, QGroupBox,
+                             QLabel, QProgressBar, QPushButton, QSlider,
+                             QWidget)
+from skimage import transform
+from tensorflow import keras
+
+from NNfeeder import prepareNNImages
+from nnIO import loadTifFolder, loadTifStack
+from QtImageViewerMerge import QtImageViewerMerge
 from SATS_GUI import SATS_GUI
-import matplotlib.pyplot as plt
+
 # Adjust for different screen sizes
 QApplication.setAttribute(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
 
@@ -49,18 +46,18 @@ class MultiPageTIFFViewerQt(QWidget):
         self.viewer_Orig = QtImageViewerMerge()
         self.imageDrpOrig = self.viewer_Orig.addImage()
         self.imageMitoOrig = self.viewer_Orig.addImage()
-        self.viewer_Orig.setLUT(self.imageDrpOrig, 'viridis', False)
-        self.viewer_Orig.setLUT(self.imageMitoOrig, 'thermal', True)
+        self.viewer_Orig.setLUT(self.imageDrpOrig, 'reds')
+        self.viewer_Orig.setLUT(self.imageMitoOrig, 'grey')
 
         self.viewer_Proc = QtImageViewerMerge()
         self.imageDrpProc = self.viewer_Proc.addImage()
         self.imageMitoProc = self.viewer_Proc.addImage()
-        self.viewer_Proc.setLUT(self.imageDrpProc, 'viridis', False)
-        self.viewer_Proc.setLUT(self.imageMitoProc, 'thermal', True)
+        self.viewer_Proc.setLUT(self.imageDrpProc, 'reds')
+        self.viewer_Proc.setLUT(self.imageMitoProc, 'grey')
 
         self.viewer_nn = QtImageViewerMerge()
         self.imageNN = self.viewer_nn.addImage()
-        self.viewer_nn.setLUT(self.imageNN, 'inferno', True)
+        self.viewer_nn.setLUT(self.imageNN, 'inferno')
         self.loadBox = QGroupBox()
 
         # Connect the viewers
@@ -128,6 +125,18 @@ class MultiPageTIFFViewerQt(QWidget):
         self.timer.timeout.connect(self.onTimer)
         self.timer.setInterval(20)
 
+        # init variables
+        self.mode = None
+        self.model = None
+        self.image_drpOrig = None
+        self.image_mitoOrig = None
+        self.nnOutput = None
+        self.mitoDataFull = None
+        self.drpDataFull = None
+        self.maxPos = None
+        self.nnRecalculated = None
+
+
         self.app = app
         self.order = 1
         self.linePen = pg.mkPen(color='#AAAAAA')
@@ -148,7 +157,7 @@ class MultiPageTIFFViewerQt(QWidget):
             print("Folder mode")
             self.mode = 'folder'
             self.image_drpOrig, self.image_mitoOrig, self.nnOutput = loadTifFolder(
-                os.path.dirname(fname[0]), resizeParam, self.order, self.progress, app)
+                os.path.dirname(fname[0]), resizeParam, self.order, self.progress, self.app)
         else:
             self.mode = 'stack'
             print("Stack mode")
@@ -178,7 +187,6 @@ class MultiPageTIFFViewerQt(QWidget):
             # Do the NN calculation if there is not already a file there
             if self.model == 'folder' and np.max(self.nnOutput[frame]) > 0:
                 nnDataPres = 1
-                pass
             else:
                 nnDataPres = 0
                 output_predict = self.model.predict_on_batch(inputData)
@@ -221,7 +229,7 @@ class MultiPageTIFFViewerQt(QWidget):
         # outputDataSmooth[0:N] = np.ones(N)*np.mean(outputData[0:N])
         # for x in range(N, len(outputData)):
         #     outputDataSmooth[x] = np.sum(outputData[x-N:x])/N
-
+        self.app.processEvents()
         if self.mode == 'stack':
             self.outputPlot.deleteRects()
             self.outputPlot.frames.setData([])
@@ -231,6 +239,7 @@ class MultiPageTIFFViewerQt(QWidget):
         else:
             self.LoadingStatusLabel.setText('Getting the timing data')
             self.outputPlot.loadData(os.path.dirname(fname[0]), self.progress, self.app)
+            self.app.processEvents()
             for i in range(-1, 6):
                 self.outputPlot.inc = i
                 self.outputPlot.updatePlot()
@@ -284,10 +293,10 @@ class MultiPageTIFFViewerQt(QWidget):
         self.viewer_Proc.setImage(self.drpDataFull[0], 0)
         self.viewer_nn.setImage(self.nnOutput[0], 0)
 
-    def startTimer(self, i=0):
+    def startTimer(self):
         self.timer.start()
 
-    def stopTimer(self, i=0):
+    def stopTimer(self):
         self.timer.stop()
 
     def nextFrame(self):
@@ -300,10 +309,13 @@ class MultiPageTIFFViewerQt(QWidget):
         self.frameSlider.setValue(i - 1)
         self.onTimer()
 
+def main():
+    app = QApplication(sys.argv)
+    # app.setAttribute(QtCore.Qt.AA_Use96Dpi)
+    stackViewer = MultiPageTIFFViewerQt(app)
 
-app = QApplication(sys.argv)
-# app.setAttribute(QtCore.Qt.AA_Use96Dpi)
-stackViewer = MultiPageTIFFViewerQt(app)
+    stackViewer.showMaximized()
+    sys.exit(app.exec_())
 
-stackViewer.showMaximized()
-sys.exit(app.exec_())
+if __name__ == '__main__':
+    main()

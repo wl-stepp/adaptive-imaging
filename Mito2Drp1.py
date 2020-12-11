@@ -1,25 +1,25 @@
 # -*- coding: utf-8 -*-
+# pylint: skip-file
 """
 Created on Fri Oct 23 11:01:27 2020
 
 @author: stepp
 """
 
+import time
+
+import h5py  # HDF5 data file management library
+import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
-import matplotlib.pyplot as plt
-import h5py   # HDF5 data file management library
 from sklearn.model_selection import train_test_split
-import time
-from tqdm.keras import TqdmCallback  # Used for Progress bars during training
-
+from tensorflow.keras.layers import Activation, Input
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input, Activation
-from tensorflow.python.keras.layers import Conv2D, MaxPooling2D, Conv3D, \
-    MaxPooling3D
-from tensorflow.python.keras.layers import concatenate, UpSampling2D, \
-    BatchNormalization, Reshape
 from tensorflow.keras.optimizers import Adam
+from tensorflow.python.keras.layers import (BatchNormalization, Conv2D, Conv3D,
+                                            MaxPooling2D, MaxPooling3D,
+                                            Reshape, UpSampling2D, concatenate)
+from tqdm.keras import TqdmCallback  # Used for Progress bars during training
 
 
 def image_stack_blur(image_stack, sigma_x, sigma_y):

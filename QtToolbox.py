@@ -1,8 +1,7 @@
-from matplotlib import cm
-import numpy as np
-from PyQt5.QtGui import qRgb
 import matplotlib
+import numpy as np
 import pyqtgraph
+from matplotlib import cm
 
 
 def getImageItemcolormap(name='hot', alpha=False, opacity=(0.3, 0.85), saturation=255):
@@ -13,7 +12,6 @@ def getImageItemcolormap(name='hot', alpha=False, opacity=(0.3, 0.85), saturatio
         a = np.linspace(opacity[0], opacity[1], 255)
         colormap._lut[:, 3] = a
     lut = (colormap._lut * 255).view(np.ndarray).astype(int)
-    # lut = [qRgb(i[0], i[1], i[2]) for i in lut]
     return lut
 
 

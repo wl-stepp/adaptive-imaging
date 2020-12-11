@@ -3,14 +3,11 @@
         installing image_slicer using pip
    """
 
-from PIL import Image, ImageFont, ImageDraw
-from skimage.io import imread
-import time
 import itertools
+
 import matplotlib.pyplot as plt
-import numpy as np
-from skimage import io
 from matplotlib.axes import Axes
+from skimage import io
 
 
 def calculatePixel(mn, overlap, targetSize, shape):
@@ -63,7 +60,7 @@ def getTilePositions(image, targetSize=128):
                  'overlap': overlap, 'stitch': int(overlap/2), 'n': n}
 
     for position in positions['mn']:
-        position_xy = calculatePixel(position, overlap, targetSize)
+        position_xy = calculatePixel(position, overlap, targetSize, image.shape)
         positions['px'].append(position_xy)
 
     return positions
@@ -109,7 +106,8 @@ def getTilePositions_v2(image, targetSize=128):
     return positions
 
 
-if __name__ == "__main__":
+def main():
+
     path = '//lebnas1.epfl.ch/microsc125/Watchdog/test_image/Default'
     # fileName = 'img_channel000_position000_time000000000_z000.tif'
     fileName = 'moon.tif'
@@ -118,12 +116,10 @@ if __name__ == "__main__":
 
     positions = getTilePositions_v2(image, 128)
 
-    fig = plt.figure()
+    plt.figure()
     ax = plt.axes()
     plt.draw()
-    image_1 = np.zeros(image.shape)
-    stitch = positions['stitch']
-    stitch1 = None if stitch == 0 else -stitch
+
 
     for position in positions['px']:
         setWidth = 0.5
@@ -141,3 +137,6 @@ if __name__ == "__main__":
     plt.imshow(image)
     plt.pause(0.1)
     plt.show()
+
+if __name__ == "__main__":
+    main()

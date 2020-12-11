@@ -1,19 +1,14 @@
-from PyQt5.QtCore import Qt, pyqtSignal, QT_VERSION_STR, QTimer, QRectF, QPointF, pyqtSlot
-from PyQt5.QtWidgets import QWidget, QSlider, QPushButton, QLabel,\
-    QGridLayout, QFileDialog, QProgressBar, QGroupBox, QApplication, QGraphicsScene, QGraphicsView,\
-    QHBoxLayout, QMainWindow, QFrame, QGraphicsGridLayout
-from PyQt5.QtGui import QColor, QBrush, QPen, QMovie, qRgb, QPixmap, QImage, QPicture, QPainter
-import PyQt5.QtGui as QtGui
-import PyQt5.QtCore as QtCore
-import numpy as np
-from QtToolbox import getImageItemcolormap
-from qimage2ndarray import gray2qimage, array2qimage
-from skimage import io
 import sys
-from QtImageViewer import QtImageViewer
+
+import numpy as np
+import PyQt5.QtCore as QtCore
+import PyQt5.QtGui as QtGui
 import pyqtgraph as pg
-from matplotlib import cm
-import time
+from PyQt5.QtCore import QPointF, QRectF, Qt, pyqtSignal, pyqtSlot
+from PyQt5.QtGui import QPainter, QPicture
+from PyQt5.QtWidgets import (QApplication, QFrame, QGridLayout, QMainWindow,
+                             QPushButton, QSlider, QWidget)
+from skimage import io
 
 
 class CrossItem(pg.GraphicsObject):
@@ -26,11 +21,12 @@ class CrossItem(pg.GraphicsObject):
         self._generate_picture()
         self.setZValue(100)
 
+
     @property
     def rect(self):
         return self._rect
 
-    def _generate_picture(self, pos=[0, 0]):
+    def _generate_picture(self, pos=(0,0)):
         size = 5
         painter = QPainter(self.picture)
         painter.setPen(pg.mkPen(color=self.color))
@@ -43,8 +39,8 @@ class CrossItem(pg.GraphicsObject):
         pos = QPointF(pos[0][1]+0.5, pos[0][0]+0.5)
         self.setPos(pos)
 
-    def paint(self, painter, option, widget=None):
-        painter.drawPicture(0, 0, self.picture)
+    def paint(self, *painter):
+        painter[0].drawPicture(0, 0, self.picture)
 
     def boundingRect(self):
         return QRectF(self.picture.boundingRect())
@@ -118,17 +114,16 @@ class QtImageViewerMerge(QMainWindow):  # GraphicsWindow):
         self.numChannels = self.numChannels + 1
         return imgItem
 
-    def setLUT(self, img, name='hot', transparency=False, opacity=(0.3, 0.85)):
+    def setLUT(self, img, name='hot'):
         for i in range(0, len(self.imageItems)):
             if self.imageItems[i]['ImageItem'] == img:
-                index = i
-        print('lookup ', index, name)
-        self.saturationSliders[index].gradient.loadPreset(name)
+                channel = i
+        self.saturationSliders[channel].loadPresetLUT(name)
 
-        self.updateImage(index)
-        # self.imageItems[index]['cm_name'] = name
-        # self.imageItems[index]['transparency'] = transparency
-        # self.imageItems[index]['opacity'] = opacity
+        self.updateImage(channel)
+        # self.imageItems[channel]['cm_name'] = name
+        # self.imageItems[channel]['transparency'] = transparency
+        # self.imageItems[channel]['opacity'] = opacity
         # colormap = getImageItemcolormap(name, transparency, opacity)
         # img.setLookupTable(colormap)
 
@@ -136,13 +131,11 @@ class QtImageViewerMerge(QMainWindow):  # GraphicsWindow):
         self.resizedEmitter.emit()
 
     def addMenu(self):
-        print(self.numChannels)
         channel = self.numChannels
         thisMenu = QFrame(self.toggleMenu)
         self.qFrames.append(thisMenu)
         thisMenuLayout = QGridLayout(thisMenu)
-        self.saturationSliders.append(LUTItemSimple(thisMenu))
-        print('Channel    ', channel)
+        self.saturationSliders.append(LUTItemSimple())
         self.saturationSliders[self.numChannels].gradientChanged.connect(
             lambda: self.updateImage(channel))
         self.saturationSliders[self.numChannels].levelChanged.connect(
@@ -156,7 +149,7 @@ class QtImageViewerMerge(QMainWindow):  # GraphicsWindow):
         if channel > 0:
             self.opacitySliders.append(QSlider(Qt.Vertical, self.widget))
             self.opacitySliders[self.numChannels].setRange(0, 255)
-            self.opacitySliders[self.numChannels].setMaximumHeight(140)
+            self.opacitySliders[self.numChannels].setMaximumHeight(120)
             self.opacitySliders[self.numChannels].setMinimumWidth(20)
 
             self.opacitySliders[self.numChannels].setValue(int(0.85*255))
@@ -166,7 +159,7 @@ class QtImageViewerMerge(QMainWindow):  # GraphicsWindow):
         else:
             self.opacitySliders.append(0)
 
-        self.gridMenu.addWidget(thisMenu, 0, self.numChannels+1)
+        self.gridMenu.addWidget(thisMenu, 0, self.numChannels+1, alignment=Qt.AlignTop)
         thisMenu.hide()
 
     def showMenu(self):
@@ -176,7 +169,7 @@ class QtImageViewerMerge(QMainWindow):  # GraphicsWindow):
                 frame.setVisible(True)
 
             self.toggle = 1
-            self.toggleMenu.setMinimumHeight(200)
+            self.toggleMenu.setMinimumHeight(180)
             self.toggleMenu.setMinimumWidth(130*self.numChannels+1)
         else:
             for frame in self.qFrames:
@@ -185,28 +178,27 @@ class QtImageViewerMerge(QMainWindow):  # GraphicsWindow):
             self.toggleMenu.setFixedSize(40, 40)
 
     @pyqtSlot(int)
-    def adjustOpacity(self, value, index):
-        opacity = self.opacitySliders[index].value()/255
-        self.imageItems[index]['ImageItem'].setOpacity(opacity)
+    def adjustOpacity(self, *values):
+        channel = values[1]
+        opacity = self.opacitySliders[channel].value()/255
+        self.imageItems[channel]['ImageItem'].setOpacity(opacity)
 
     @pyqtSlot(int)
-    def adjustLevel(self, index):
-        self.imageItems[index]['ImageItem'].setLevels(
-            self.saturationSliders[index].regions[0].getRegion())
+    def adjustLevel(self, channel):
+        self.imageItems[channel]['ImageItem'].setLevels(
+            self.saturationSliders[channel].regions[0].getRegion())
 
     @pyqtSlot(int)
-    def updateImage(self, index):
-        print('INDEX  ', index)
-        self.imageItems[index]['ImageItem'].setLookupTable(
-            self.saturationSliders[index].getLookupTable())
-        print('LUT set')
+    def updateImage(self, channel):
+        self.imageItems[channel]['ImageItem'].setLookupTable(
+            self.saturationSliders[channel].getLookupTable())
 
 
 class GradientEditorWidget(pg.GraphicsView):
 
-    def __init__(self, parent=None,  *args, **kargs):
+    def __init__(self, *args, **kargs):
         background = kargs.pop('background', 'default')
-        pg.GraphicsView.__init__(self, parent, useOpenGL=False, background=background)
+        pg.GraphicsView.__init__(self, *args, useOpenGL=False, background=background)
         self.item = pg.GradientEditorItem(*args, **kargs)
         self.setCentralItem(self.item)
         self.setSizePolicy(QtGui.QSizePolicy.Preferred, QtGui.QSizePolicy.Expanding)
@@ -225,18 +217,23 @@ class LUTItemSimple(QWidget):
     gradientChanged = pyqtSignal([], [int])
     levelChanged = pyqtSignal([], [int])
 
-    def __init__(self, parent=None,  *args, **kargs):
-        QWidget.__init__(self, parent)
+    def __init__(self):
+        QWidget.__init__(self)
         frame = QFrame(self)
         grid = QGridLayout(frame)
         self.setMinimumWidth(100)
         self.setMinimumHeight(150)
 
-        self.gradient = GradientEditorWidget(frame)
+        self.gradient = GradientEditorWidget(parent=frame)
         self.gradient.setOrientation('right')
         grid.addWidget(self.gradient, 0, 0)
         self.gradient.sigGradientChangeFinished.connect(self.gradientChange)
         self.gradient.loadPreset('inferno')
+
+        self.Gradients = pg.OrderedDict([('reds', {'ticks': [(0.0, (0, 0, 0, 255)),
+                                                             (1.0, (255, 0, 0, 255))],
+                                                   'mode': 'hsv'})])
+        self.setCustomGradients()
 
         self.glw = pg.GraphicsLayoutWidget(parent=frame)
 
@@ -263,7 +260,12 @@ class LUTItemSimple(QWidget):
             region.sigRegionChangeFinished.connect(self.regionChanged)
         # self.regions[0].setSpan(0.8, 0.8)
 
+        self.lut = None
         self.levelMode = 'mono'
+
+    def customLutClicked(self):
+        act = self.sender()
+        self.gradient.restoreState(self.Gradients[act.name])
 
     def gradientChange(self):
         self.hideTicks()
@@ -291,17 +293,50 @@ class LUTItemSimple(QWidget):
         self.lut = self.gradient.getLookupTable(n, alpha=alpha)
         return self.lut
 
-    def regionChanging(self, value):
+    def regionChanging(self):
         self.levelChanged.emit()
 
     def regionChanged(self):
         self.levelChanged.emit()
 
+    def loadPresetLUT(self, name):
+        isSet = False
+        for g in self.Gradients:
+            if g == name:
+                self.gradient.restoreState(self.Gradients[g])
+                isSet = True
+        if not isSet:
+            self.gradient.loadPreset(name)
+
+    def setCustomGradients(self):
+        for g in self.Gradients:
+            px = QtGui.QPixmap(100, 15)
+            p = QtGui.QPainter(px)
+            self.gradient.restoreState(self.Gradients[g])
+            grad = self.gradient.getGradient()
+            brush = QtGui.QBrush(grad)
+            p.fillRect(QtCore.QRect(0, 0, 100, 15), brush)
+            p.end()
+            label = QtGui.QLabel()
+            label.setPixmap(px)
+            label.setContentsMargins(1, 1, 1, 1)
+            labelName = QtGui.QLabel(g)
+            hbox = QtGui.QHBoxLayout()
+            hbox.addWidget(labelName)
+            hbox.addWidget(label)
+            widget = QtGui.QWidget()
+            widget.setLayout(hbox)
+            act = QtGui.QWidgetAction(self)
+            act.setDefaultWidget(widget)
+            act.triggered.connect(self.customLutClicked)
+            act.name = g
+            act.custom = True
+            self.gradient.menu.insertAction(self.gradient.menu.actions()[-3], act)
+
 # pg.ViewBox.viewRange.__get__
 
 
-if __name__ == '__main__':
-
+def main():
     fname = ('C:/Users/stepp/Documents/data_raw/SmartMito/__short.tif')
     image_mitoOrig = io.imread(fname)
     image_drpOrig = image_mitoOrig[1]
@@ -318,28 +353,36 @@ if __name__ == '__main__':
     # pyqtgraph.ColorMap()
     # viewer.setColorMap(getPyQtcolormap())
 
-    # lutitem = LUTItemSimple()
-    # lutitem.show()
+    mode = 2
 
-    win = pg.GraphicsWindow()
+    if mode == 1:
+        lutitem = LUTItemSimple()
+        lutitem.show()
+    elif mode == 2:
+        win = pg.GraphicsWindow()
 
-    # Show viewer and run application.
-    viewer = QtImageViewerMerge()
-    viewer2 = QtImageViewerMerge()
+        # Show viewer and run application.
+        viewer = QtImageViewerMerge()
+        viewer2 = QtImageViewerMerge()
 
-    grid = QGridLayout(win)
-    grid.addWidget(viewer, 0, 0)
-    grid.addWidget(viewer2, 0, 1)
+        grid = QGridLayout(win)
+        grid.addWidget(viewer, 0, 0)
+        grid.addWidget(viewer2, 0, 1)
 
-    img_drp = viewer.addImage(drp)
-    img_mito = viewer.addImage(mito)
 
-    viewer.setLUT(img_drp, 'viridis')
-    viewer.setLUT(img_mito, 'inferno')
-    # viewer.setImage(drp, 0)
-    # viewer.setImage(mito, 1)
+        img_drp = viewer.addImage(drp)
+        img_mito = viewer.addImage(mito)
 
-    viewer2.addImage(mito)
-    win.show()
+        viewer.setLUT(img_drp, 'reds')
+        viewer.setLUT(img_mito, 'grey')
+        # viewer.setImage(drp, 0)
+        # viewer.setImage(mito, 1)
+
+        viewer2.addImage(mito)
+
+        win.show()
 
     sys.exit(app.exec_())
+
+if __name__ == '__main__':
+    main()
