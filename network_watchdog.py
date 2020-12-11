@@ -332,7 +332,7 @@ class NetworkWatchdog(QWidget):
 
 def main():
     app = QApplication(sys.argv)
-    Watchdog = NetworkWatchdog(app)
+    Watchdog = NetworkWatchdog()
 
     Watchdog.show()
     sys.exit(app.exec_())
