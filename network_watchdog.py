@@ -78,12 +78,12 @@ class NetworkWatchdog(QWidget):
         self.imageMito = self.viewerMerge.addImage()
         self.viewerNN = QtImageViewerMerge()
         self.imageNN = self.viewerNN.addImage()
+        self.viewerNN.setLUT(self.imageNN, 'inferno')
 
         self.viewerOutput = pg.PlotWidget()
         self.outputPlot = self.viewerOutput.plot()
-        self.viewerMerge.setLookupTable(self.imageDrp, 'viridis', False)
-        self.viewerMerge.setLookupTable(self.imageMito, 'hot', True)
-        self.viewerMerge.setLookupTable(self.imageNN, 'inferno', False)
+        self.viewerMerge.setLUT(self.imageDrp, 'reds')
+        self.viewerMerge.setLUT(self.imageMito, 'grey')
 
         grid = QGridLayout(self)
         grid.addWidget(self.viewerMerge, 1, 0)
