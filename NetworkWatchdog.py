@@ -16,6 +16,7 @@ that runs on the same machine as microManager.
 """
 
 
+import json
 import os
 import re  # Regular expression module
 import sys
@@ -57,6 +58,10 @@ class NetworkWatchdog(QWidget):
 
     def __init__(self):
 
+        # Read settings from the json file depending on which computer we are on
+        with open('./ATS_settings.json') as file:
+            self.settings = json.load(file)[os.environ['COMPUTERNAME'].lower()]
+
         # Setting for the watchdogs
         patterns = ["*.tif"]
         ignorePatterns = ["*.txt", "*.tiff"]
@@ -67,11 +72,7 @@ class NetworkWatchdog(QWidget):
 
         # Loading the NN model
         self.nnImageSize = 128
-        if os.environ['COMPUTERNAME'] == 'LEBPC20':
-            self.modelPath = 'E:/Watchdog/SmartMito/model_Dora.h5'
-        elif os.environ["COMPUTERNAME"] == 'LEBPC34':
-            self.modelPath = (
-                'C:/Users/stepp/Documents/data_raw/SmartMito/model_Dora.h5')
+        self.modelPath = self.settings['modelPath']
         self.model = keras.models.load_model(self.modelPath, compile=True)
         # Prep some structure to hold data
 
@@ -102,17 +103,18 @@ class NetworkWatchdog(QWidget):
         self.linePen = pg.mkPen(color='#AAAAAA')
 
         # Assign the event handlers
-        myEventHandler.on_created = self.on_created
-        myEventHandler.on_deleted = self.on_deleted
-        myEventHandler.onModified = self.onModified
-        myEventHandler.onMoved = self.onMoved
+        myEventHandler.on_created = self.onCreated
+        myEventHandler.on_deleted = self.onDeleted
+        myEventHandler.on_modified = self.onModified
+        myEventHandler.on_moved = self.onMoved
         self.refreshGUI.connect(self.refreshViewBoxes)
         self.reinitGUI.connect(self.reinitializeViewBoxes)
-        self.viewerNN.vb.setXLink(self.viewerMerge.vb)
-        self.viewerNN.vb.setYLink(self.viewerMerge.vb)
+        self.viewerNN.viewBox.setXLink(self.viewerMerge.viewBox)
+        self.viewerNN.viewBox.setYLink(self.viewerMerge.viewBox)
 
         # More settings for the Watchdos
-        path = "//lebnas1.epfl.ch/microsc125/Watchdog/"
+        path = self.settings['imageFolder']
+        print('FOLDERFOLDERFOLDER', path)
         goRecursively = True
         self.myObserver = Observer()
         self.myObserver.schedule(
@@ -145,7 +147,7 @@ class NetworkWatchdog(QWidget):
     def onCreated(self, event):
         """Do action when file is created in watchlocation"""
 
-    def ondeleted(self, event):
+    def onDeleted(self, event):
         """Do action when file is deleted in watchlocation"""
 
     def onModified(self, event):
@@ -169,8 +171,7 @@ class NetworkWatchdog(QWidget):
             return
 
         # check framNumwrite.py output from the binary
-        file = open(os.path.join(
-            os.path.dirname(self.modelPath), 'binary_output.dat'), mode='rb')
+        file = open(os.path.join(self.settings['frameNumBinary']), mode='rb')
         content = file.read()
         file.close()
 
@@ -290,7 +291,7 @@ class NetworkWatchdog(QWidget):
         self.outputX.append(timeX)  # (frameNum-1)/2)
 
         # Write output to binary for Matlab to read
-        writeBin(output, 0)
+        writeBin(output, printTime=0, path=self.settings['matlabPath'], filename='')
         # Write output to txt file for later
         file = open(txtFile, 'a')
         file.write('%d, %d\n' % (frameNum, output))
@@ -339,16 +340,17 @@ class NetworkWatchdog(QWidget):
         #     for line in viewer.lines:
         #         line.setPen(self.linePen)
         #         line.setZValue(100)
-        self.viewerMerge.vb.setRange(xRange=(0, inputSize), yRange=(0, inputSize))
+        self.viewerMerge.viewBox.setRange(xRange=(0, inputSize), yRange=(0, inputSize))
 
     def onMoved(self, event):
         """ start when a file was used in the watchlocation. Could be removed(?) """
 
-    def closeEvent(self):
+    def closeEvent(self, event):
         """ Terminate the watchdogs and clean up when the windows of the GUI is closed """
-        print('Watchdogs stopped')
+        print(event)
         self.myObserver.stop()
         self.myObserver.join()
+        print('Watchdogs stopped')
 
 
 def main():

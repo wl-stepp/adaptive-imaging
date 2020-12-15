@@ -7,8 +7,9 @@ Returns:
 
 
 import numpy as np
-from imageTiles import getTilePositionsV2
 from skimage import exposure, filters, transform
+
+from ImageTiles import getTilePositionsV2
 
 
 def prepareNNImages(mitoFull, drpFull, nnImageSize=128):

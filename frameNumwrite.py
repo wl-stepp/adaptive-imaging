@@ -1,6 +1,7 @@
 """ Implements a class that is used to work together with NetworkWatchdog to skip files if it is
 to slow to process all the images. """
 
+import json
 import os
 import re
 import time
@@ -16,6 +17,9 @@ class FrameNumwrite():
     to enable NetworkWatchdog to skip the file if it is working on an older one. """
 
     def __init__(self):
+        with open('./ATS_settings.json') as file:
+            self.settings = json.load(file)[os.environ['COMPUTERNAME'].lower()]
+
         patterns = ["*.tif"]
         ignorePatterns = ["*.txt", "*.tiff"]
         ignoreDirectories = True
@@ -24,18 +28,14 @@ class FrameNumwrite():
                                                      ignoreDirectories,
                                                      caseSensitive)
 
-        if os.environ['COMPUTERNAME'] == 'LEBPC20':
-            self.modelPath = 'E:/Watchdog/SmartMito/model_Dora.h5'
-        elif os.environ["COMPUTERNAME"] == 'LEBPC34':
-            self.modelPath = (
-                'C:/Users/stepp/Documents/data_raw/SmartMito/model_Dora.h5')
+        self.binaryPath = self.settings['frameNumBinary']
 
         self.frameNumOld = 100
 
         myEventHandler.on_deleted = self.onDeleted
         myEventHandler.on_created = self.onCreated
 
-        path = "//lebnas1.epfl.ch/microsc125/Watchdog/"
+        path = self.settings['imageFolder']
         goRecursively = True
         self.myObserver = Observer()
         self.myObserver.schedule(myEventHandler, path, recursive=goRecursively)
@@ -54,18 +54,14 @@ class FrameNumwrite():
             return
 
         if frameNum % 2 and frameNum:
-            writeBin(frameNum + 1, 0, os.path.dirname(self.modelPath))
+            writeBin(frameNum + 1, 0, path=self.settings['frameNumBinary'], filename='')
             print(int((frameNum-1)/2), ' written')
             self.frameNumOld = frameNum
 
-    def onDeleted(self):
+    def onDeleted(self, _):
         """ Signal if a file has been deleted, does not work very well. Used with TestTifSaver """
-        writeBin(0, 0, os.path.dirname(self.modelPath))
+        writeBin(0, 0, path=self.binaryPath, filename='')
         print(0, ' written')
-
-
-if __name__ == "__main__":
-    main()
 
 
 def main():
@@ -81,3 +77,7 @@ def main():
     except KeyboardInterrupt:
         writer.myObserver.stop()
         writer.myObserver.join()
+
+
+if __name__ == "__main__":
+    main()

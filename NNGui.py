@@ -72,10 +72,10 @@ class NNGui(QWidget):
         self.loadBox = QGroupBox()
 
         # Connect the viewers
-        self.viewerOrig.vb.setXLink(self.viewerProc.vb)
-        self.viewerOrig.vb.setYLink(self.viewerProc.vb)
-        self.viewerNN.vb.setXLink(self.viewerProc.vb)
-        self.viewerNN.vb.setYLink(self.viewerProc.vb)
+        self.viewerOrig.viewBox.setXLink(self.viewerProc.viewBox)
+        self.viewerOrig.viewBox.setYLink(self.viewerProc.viewBox)
+        self.viewerNN.viewBox.setXLink(self.viewerProc.viewBox)
+        self.viewerNN.viewBox.setYLink(self.viewerProc.viewBox)
 
         # Slider and arrow buttons for frame traversal.
         self.sliderBox = QGroupBox()
@@ -97,7 +97,7 @@ class NNGui(QWidget):
 
         pen = pg.mkPen(color='#AAAAAA', style=Qt.DashLine)
         self.frameLine = pg.InfiniteLine(pos=0.5, angle=90, pen=pen)
-        self.outputPlot.pI.addItem(self.frameLine)
+        self.outputPlot.plotItem1.addItem(self.frameLine)
 
         # Connect functions to the interactive elements
         self.modelButton.clicked.connect(self.loadModel)
@@ -243,10 +243,10 @@ class NNGui(QWidget):
         # for x in range(N, len(outputData)):
         #     outputDataSmooth[x] = np.sum(outputData[x-N:x])/N
         self.app.processEvents()
+        self.outputPlot.deleteRects()
+        self.outputPlot.frames.setData([])
+        self.outputPlot.nnframeScatter.setData([])
         if self.mode == 'stack':
-            self.outputPlot.deleteRects()
-            self.outputPlot.frames.setData([])
-            self.outputPlot.nnframeScatter.setData([])
             self.outputPlot.nnline.setData(outputData)
             self.outputPlot.scatter.setData(range(0, len(outputData)), outputData)
         else:
@@ -262,7 +262,7 @@ class NNGui(QWidget):
         self.refreshGradients()
         self.onTimer()
         self.loadingStatusLabel.setText('Done')
-        self.viewerProc.vb.setRange(xRange=(0, postSize), yRange=(0, postSize))
+        self.viewerProc.viewBox.setRange(xRange=(0, postSize), yRange=(0, postSize))
 
     def loadModel(self):
         """ Load a .h5 model generated using Keras """

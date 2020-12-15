@@ -1,0 +1,18 @@
+{
+
+    "lebpc34": {
+        "imageFolder": "C:/Users/stepp/Documents/data_raw/SmartMito/",
+        "frameNumBinary": "C:/Users/stepp/Documents/data_raw/SmartMito/frameNum.dat",
+        "modelPath": "C:/Users/stepp/Documents/data_raw/SmartMito/model_Dora.h5",
+        "matlabPath": "C:/Users/stepp/Documents/data_raw/SmartMito/matlab_bin.dat"
+    },
+    "lebpc20": {
+        "imageFolder": "//lebnas1.epfl.ch/microsc125/Watchdog/",
+        "frameNumBinary": "E:/Watchdog/SmartMito/frameNum.dat",
+        "modelPath": "E:/Watchdog/SmartMito/model_Dora.h5",
+        "matlabPath": "//lebnas1.epfl.ch/microsc125/Watchdog/matlab_bin.dat"
+    },
+
+    "nnImageSize": 128
+
+}

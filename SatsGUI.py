@@ -11,11 +11,10 @@ from PyQt5 import QtCore, QtGui
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import QApplication, QGridLayout, QWidget
 
-from nnIO import loadElapsedTime, loadiSIMmetadata, loadNNData
+from NNio import loadElapsedTime, loadiSIMmetadata, loadNNData
 
 # Adjust for different screen sizes
 QApplication.setAttribute(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
-
 
 
 class RectItem(pg.GraphicsObject):
@@ -233,6 +232,7 @@ def main():
     gui.show()
 
     sys.exit(app.exec_())
+
 
 if __name__ == '__main__':
     main()

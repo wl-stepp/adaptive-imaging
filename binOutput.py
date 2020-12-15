@@ -12,9 +12,6 @@ import os.path as ospath
 import time
 from datetime import datetime
 
-if __name__ == "__main__":
-    main()
-
 
 def main():
     """ Use this to test a direct binary alternating value to the specified file. """
@@ -45,12 +42,15 @@ def main():
         print('done')
 
 
-def writeBin(output, printTime=0, path="//lebnas1.epfl.ch/microsc125/Watchdog/"):
+def writeBin(output, printTime=0, path="//lebnas1.epfl.ch/microsc125/Watchdog/",
+             filename='binary_output.dat'):
     """ Write a integer to a binary file that can be read by readBinNetwork.m from Matlab """
-    # Set the file location for the watched file here
-    # path = "//lebnas1.epfl.ch/microsc125/Watchdog/"
-    filename = 'binary_output.dat'
-    fullFileDir = ospath.join(path, filename)
+
+    if filename != '':
+        fullFileDir = ospath.join(path, filename)
+    else:
+        fullFileDir = path
+
     file = open(fullFileDir, 'wb')
     file.write(bytearray(output))
     file.close()
@@ -59,3 +59,7 @@ def writeBin(output, printTime=0, path="//lebnas1.epfl.ch/microsc125/Watchdog/")
         now = datetime.now()
         currentTime = now.strftime("%H:%M:%S.%f")
         print(f"{output} written at {currentTime}")
+
+
+if __name__ == "__main__":
+    main()

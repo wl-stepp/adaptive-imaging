@@ -9,6 +9,7 @@ watchdog on lebpc20
 """
 
 import glob
+import json
 import os
 import time
 
@@ -45,7 +46,6 @@ def main():
 
     inputData = dataPath + '180420_130.tif'
 
-
     mito = []
     drp = []
 
@@ -71,7 +71,11 @@ def main():
     print('Input : ', drp.shape)
     print('Input : ', np.shape(drp)[0])
 
-    nasPath = '//lebnas1.epfl.ch/microsc125/Watchdog/python_saver/'
+    with open('./ATS_settings.json') as file:
+        settings = json.load(file)[os.environ['COMPUTERNAME'].lower()]
+
+    nasPath = os.path.join(settings['imageFolder'], 'python_saver/')
+
     # Make new folder there as microManager would
     dirs = glob.glob(nasPath + '*/')
     if len(dirs) > 0:
@@ -93,10 +97,10 @@ def main():
 
         # First write mito then drp as watchdog waits for drp image
         io.imsave(mitoPath, mito[item, :, :].astype(np.uint16),
-                check_contrast=False)
+                  check_contrast=False)
         time.sleep(0.05)
         io.imsave(drpPath, drp[item, :, :].astype(np.uint16),
-                check_contrast=False)
+                  check_contrast=False)
         time2 = time.perf_counter()
         time.sleep(np.max([0, .3 - (time2 - time1)]))
         i = i + 1
@@ -112,10 +116,10 @@ def main():
         time.sleep(0.001)
     print('Done')
 
-
     del inputData
     del inputDataFilename1
     del inputDataFilename2
+
 
 if __name__ == '__main__':
     main()
