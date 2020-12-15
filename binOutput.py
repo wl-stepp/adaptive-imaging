@@ -12,50 +12,50 @@ import os.path as ospath
 import time
 from datetime import datetime
 
-import numpy
-
 if __name__ == "__main__":
+    main()
+
+
+def main():
+    """ Use this to test a direct binary alternating value to the specified file. """
     path = "//lebnas1.epfl.ch/microsc125/Watchdog/"
     filename = 'binary_output.dat'
     fullFileDir = path + filename
 
-    x = False
-    x = bool(x)
-    i = 0
+    output = False
+    output = bool(output)
 
     try:
         while True:
-            t1 = time.perf_counter()
-            f = open(fullFileDir, 'wb')
-            f.write(bytearray(x))
-            f.close()
-            t2 = time.perf_counter()
-            dt = t2-t1
-            # print(dt)
+            time1 = time.perf_counter()
+            file = open(fullFileDir, 'wb')
+            file.write(bytearray(output))
+            file.close()
 
             # This changes the value every some seconds
             if (time.perf_counter() % 3) < 1.5:
-                x = False
+                output = False
                 print('False False False')
             else:
-                x = True
-                print(x)
-            t3 = time.perf_counter()
-            time.sleep(0.5-(t3-t1))
+                output = True
+                print(output)
+            time3 = time.perf_counter()
+            time.sleep(0.5-(time3-time1))
     except KeyboardInterrupt:
         print('done')
 
 
-def write_bin(x, print_time=0, path="//lebnas1.epfl.ch/microsc125/Watchdog/"):
+def writeBin(output, printTime=0, path="//lebnas1.epfl.ch/microsc125/Watchdog/"):
+    """ Write a integer to a binary file that can be read by readBinNetwork.m from Matlab """
     # Set the file location for the watched file here
     # path = "//lebnas1.epfl.ch/microsc125/Watchdog/"
     filename = 'binary_output.dat'
     fullFileDir = ospath.join(path, filename)
-    f = open(fullFileDir, 'wb')
-    f.write(bytearray(x))
-    f.close()
+    file = open(fullFileDir, 'wb')
+    file.write(bytearray(output))
+    file.close()
 
-    if print_time:
+    if printTime:
         now = datetime.now()
-        current_time = now.strftime("%H:%M:%S.%f")
-        print(f"{x} written at {current_time}")
+        currentTime = now.strftime("%H:%M:%S.%f")
+        print(f"{output} written at {currentTime}")

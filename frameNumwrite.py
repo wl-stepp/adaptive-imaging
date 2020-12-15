@@ -1,3 +1,6 @@
+""" Implements a class that is used to work together with NetworkWatchdog to skip files if it is
+to slow to process all the images. """
+
 import os
 import re
 import time
@@ -5,62 +8,76 @@ import time
 from watchdog.events import PatternMatchingEventHandler
 from watchdog.observers import Observer
 
-from binOutput import write_bin
+from BinOutput import writeBin
+
+
+class FrameNumwrite():
+    """ Class that writes the latest framenumber when microManager writes a new image in order
+    to enable NetworkWatchdog to skip the file if it is working on an older one. """
+
+    def __init__(self):
+        patterns = ["*.tif"]
+        ignorePatterns = ["*.txt", "*.tiff"]
+        ignoreDirectories = True
+        caseSensitive = True
+        myEventHandler = PatternMatchingEventHandler(patterns, ignorePatterns,
+                                                     ignoreDirectories,
+                                                     caseSensitive)
+
+        if os.environ['COMPUTERNAME'] == 'LEBPC20':
+            self.modelPath = 'E:/Watchdog/SmartMito/model_Dora.h5'
+        elif os.environ["COMPUTERNAME"] == 'LEBPC34':
+            self.modelPath = (
+                'C:/Users/stepp/Documents/data_raw/SmartMito/model_Dora.h5')
+
+        self.frameNumOld = 100
+
+        myEventHandler.on_deleted = self.onDeleted
+        myEventHandler.on_created = self.onCreated
+
+        path = "//lebnas1.epfl.ch/microsc125/Watchdog/"
+        goRecursively = True
+        self.myObserver = Observer()
+        self.myObserver.schedule(myEventHandler, path, recursive=goRecursively)
+
+        # Init the model by running it once
+        self.myObserver.start()
+
+    def onCreated(self, event):
+        """ If a new file is written by microManager, get the frameNum and write it to a binary file
+        that will be read by Network Watchdog to check for the latest file written """
+        splitStr = re.split(r'img_channel\d+_position\d+_time',
+                            os.path.basename(event.src_path))
+        splitStr = re.split(r'_z\d+', splitStr[1])
+        frameNum = int(splitStr[0])
+        if frameNum == self.frameNumOld:
+            return
+
+        if frameNum % 2 and frameNum:
+            writeBin(frameNum + 1, 0, os.path.dirname(self.modelPath))
+            print(int((frameNum-1)/2), ' written')
+            self.frameNumOld = frameNum
+
+    def onDeleted(self):
+        """ Signal if a file has been deleted, does not work very well. Used with TestTifSaver """
+        writeBin(0, 0, os.path.dirname(self.modelPath))
+        print(0, ' written')
+
 
 if __name__ == "__main__":
-    patterns = ["*.tif"]
-    ignore_patterns = ["*.txt", "*.tiff"]
-    ignore_directories = True
-    case_sensitive = True
-    my_event_handler = PatternMatchingEventHandler(patterns, ignore_patterns,
-                                                   ignore_directories,
-                                                   case_sensitive)
-    if os.environ['COMPUTERNAME'] == 'LEBPC20':
-        modelPath = 'E:/Watchdog/SmartMito/model_Dora.h5'
-    elif os.environ["COMPUTERNAME"] == 'LEBPC34':
-        modelPath = 'C:/Users/stepp/Documents/data_raw/SmartMito/model_Dora.h5'
-
-    global frameNumOld
-    frameNumOld = 100
+    main()
 
 
-def on_created(event):
-    global frameNumOld
-    splitStr = re.split(r'img_channel\d+_position\d+_time',
-                        os.path.basename(event.src_path))
-    splitStr = re.split(r'_z\d+', splitStr[1])
-    frameNum = int(splitStr[0])
-    if frameNum == frameNumOld:
-        return
+def main():
+    """ Main instance of the Module """
 
-    if frameNum % 2 and frameNum:
-        write_bin(frameNum + 1, 0, os.path.dirname(modelPath))
-        print(int((frameNum-1)/2), ' written')
-        frameNumOld = frameNum
+    writer = FrameNumwrite()
 
-
-def on_deleted():
-    write_bin(0, 0, os.path.dirname(modelPath))
-    print(0, ' written')
-
-
-my_event_handler.on_deleted = on_deleted
-my_event_handler.on_created = on_created
-
-path = "//lebnas1.epfl.ch/microsc125/Watchdog/"
-go_recursively = True
-my_observer = Observer()
-my_observer.schedule(my_event_handler, path, recursive=go_recursively)
-
-
-# Init the model by running it once
-my_observer.start()
-
-print('All loaded, running...')
-# Keep running and let image update until Strg + C
-try:
-    while True:
-        time.sleep(0.1)
-except KeyboardInterrupt:
-    my_observer.stop()
-    my_observer.join()
+    print('All loaded, running...')
+    # Keep running and let image update until Strg + C
+    try:
+        while True:
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        writer.myObserver.stop()
+        writer.myObserver.join()

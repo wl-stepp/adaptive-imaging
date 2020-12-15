@@ -1,3 +1,8 @@
+"""
+Module that implements an interface for viewing and analysing adaptive temporal sampling
+data that was generated using the iSIM.
+"""
+
 import sys
 
 import numpy as np
@@ -14,18 +19,21 @@ QApplication.setAttribute(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
 
 
 class RectItem(pg.GraphicsObject):
+    """ Rectangle that can be added to a pg.ViewBox """
     def __init__(self, rect, color='#FFFFFF', parent=None):
         super().__init__(parent)
         self._rect = rect
         self.color = color
         self.picture = QtGui.QPicture()
-        self._generate_picture()
+        self.generatePicture()
 
     @property
     def rect(self):
+        """ return the original rectangle object given on initialization """
         return self._rect
 
-    def _generate_picture(self):
+    def generatePicture(self):
+        """ generate the Picture of te Rectangle using a QPainter """
         painter = QtGui.QPainter(self.picture)
         painter.setPen(pg.mkPen(color=self.color))
         painter.setBrush(pg.mkBrush(color=self.color))
@@ -33,13 +41,18 @@ class RectItem(pg.GraphicsObject):
         painter.end()
 
     def paint(self, *painter):
+        """ Not sure when this is called.
+        Might be called by the ViewBox the rectangle is added to """
         painter[0].drawPicture(0, 0, self.picture)
 
     def boundingRect(self):
+        """ return the QRectF bounding rectangle of the specified rectangle """
         return QtCore.QRectF(self.picture.boundingRect())
 
 
 class KeyPressWindow(pg.PlotWidget):
+    """ pg.PlotWidget that catches a key press on the keyboard. Used in SatsGUI to advance the
+    GUI for presentation purposes """
     sigKeyPress = QtCore.pyqtSignal(object)
 
     def __init__(self, *args, **kwargs):
@@ -50,7 +63,11 @@ class KeyPressWindow(pg.PlotWidget):
         self.sigKeyPress.emit(ev)
 
 
-class SATS_GUI(QWidget):
+class SatsGUI(QWidget):
+    """ Interface originally used to present the temporal component of adaptive temporal
+    sampling data generated using NetworkWatchdog on Mito/Drp on the iSIM. Uses the
+    KeyPressWindow to plot sequentially on a button press to allow for a 'presentation' style.
+    Now mostly used in the NNGui to display the temporal information of the data taken. """
 
     frameChanged = pyqtSignal([], [int])
 
@@ -61,54 +78,54 @@ class SATS_GUI(QWidget):
              'C:/Users/stepp/Documents/data_raw/SmartMito/' +
              'microM_test/cell_Int5s_30pc_488_50pc_561_5')
         # Windows for plotting
-        self.Plot = KeyPressWindow()
-        self.pI = self.Plot.plotItem
-        self.frames = self.pI.plot([])
+        self.plot = KeyPressWindow()
+        self.plotItem1 = self.plot.plotItem
+        self.frames = self.plotItem1.plot([])
 
         # Add second y axis
-        self.p2 = pg.ViewBox()
-        self.pI.showAxis('right')
-        self.pI.scene().addItem(self.p2)
-        self.pI.getAxis('right').linkToView(self.p2)
-        self.p2.setXLink(self.pI)
+        self.plotItem2 = pg.ViewBox()
+        self.plotItem1.showAxis('right')
+        self.plotItem1.scene().addItem(self.plotItem2)
+        self.plotItem1.getAxis('right').linkToView(self.plotItem2)
+        self.plotItem2.setXLink(self.plotItem1)
 
-        self.pI.vb.sigResized.connect(self.updateViews)
-        self.Plot.sigKeyPress.connect(self.incrementView)
+        self.plotItem1.vb.sigResized.connect(self.updateViews)
+        self.plot.sigKeyPress.connect(self.incrementView)
 
         self.nnPlotItem = pg.PlotCurveItem([], pen='w')
         self.nnframeScatter = pg.ScatterPlotItem([], symbol='o', pen=None)
-        self.p2.setZValue(100)
-        self.p2.addItem(self.nnPlotItem)
-        self.p2.addItem(self.nnframeScatter)
+        self.plotItem2.setZValue(100)
+        self.plotItem2.addItem(self.nnPlotItem)
+        self.plotItem2.addItem(self.nnframeScatter)
 
-        self.frameratePlot = self.Plot.plot([])
+        self.frameratePlot = self.plot.plot([])
         pen = pg.mkPen(color='#FF0000', style=Qt.DashLine)
         self.thrLine1 = pg.InfiniteLine(pos=90, angle=0, pen=pen)
         self.thrLine2 = pg.InfiniteLine(pos=70, angle=0, pen=pen)
         self.thrLine1.hide()
         self.thrLine2.hide()
-        self.Plot.addItem(self.thrLine1)
-        self.Plot.addItem(self.thrLine2)
+        self.plot.addItem(self.thrLine1)
+        self.plot.addItem(self.thrLine2)
 
         self.scatter = pg.ScatterPlotItem(brush='#505050', size=8, pen=pg.mkPen(color='#303030'))
         self.nnline = pg.PlotCurveItem([], pen=pg.mkPen(color='#303030'))
-        self.Plot.addItem(self.scatter)
-        self.Plot.addItem(self.nnline)
+        self.plot.addItem(self.scatter)
+        self.plot.addItem(self.nnline)
 
         # adapt for presentation
         labelStyle = {'color': '#AAAAAA', 'font-size': '20pt'}
-        self.Plot.setLabel('right', 'Frame', **labelStyle)
-        self.Plot.setLabel('bottom', 'Time [s]', **labelStyle)
-        self.Plot.setLabel('left', 'NN output', **labelStyle)
+        self.plot.setLabel('right', 'Frame', **labelStyle)
+        self.plot.setLabel('bottom', 'Time [s]', **labelStyle)
+        self.plot.setLabel('left', 'NN output', **labelStyle)
         font = QtGui.QFont()
         font.setPixelSize(20)
-        self.Plot.getAxis("bottom").setStyle(tickFont=font, tickTextHeight=500)
-        self.Plot.getAxis("left").setStyle(tickFont=font)
-        self.Plot.getAxis("right").setStyle(tickFont=font)
+        self.plot.getAxis("bottom").setStyle(tickFont=font, tickTextHeight=500)
+        self.plot.getAxis("left").setStyle(tickFont=font)
+        self.plot.getAxis("right").setStyle(tickFont=font)
 
         # Place these windows into the GUI
         grid = QGridLayout(self)
-        grid.addWidget(self.Plot, 0, 0)
+        grid.addWidget(self.plot, 0, 0)
         # grid.addWidget(self.Plot2, 1, 0)
 
         self.elapsed = None
@@ -120,6 +137,7 @@ class SATS_GUI(QWidget):
         self.rects = []
 
     def loadData(self, folder, progress=None, app=None):
+        """ load timing data using the methods in the nnIO module """
         self.elapsed = loadElapsedTime(folder, progress, app)
         self.elapsed.sort()
         self.elapsed = np.array(self.elapsed[0::2])/1000
@@ -129,9 +147,11 @@ class SATS_GUI(QWidget):
         print(self.delay)
 
     def updatePlot(self):
+        """ update the plot when the 'A' key is pressed and advance plot. This is skipped
+        over in NNGui. """
         if self.inc == 0:
             self.frames.setData(self.elapsed, np.zeros(len(self.elapsed)), symbol='o', pen=None)
-            self.pI.getAxis('left').hide()
+            self.plotItem1.getAxis('left').hide()
 
         elif self.inc == 1:
             self.nnPlotItem.setData(x=self.elapsed, y=np.arange(0, len(self.elapsed)))
@@ -151,20 +171,20 @@ class SATS_GUI(QWidget):
                     changes[i-1], 0, changes[i]-changes[i-1], np.max(self.nnData[:, 1])), color)
 
                 self.rects.append(rectItem)
-                self.Plot.addItem(rectItem)
+                self.plot.addItem(rectItem)
                 rectItem.setZValue(-100)
 
         elif self.inc == 3:
             self.nnPlotItem.hide()
             self.frames.hide()
             self.nnframeScatter.setData(self.elapsed, np.zeros(len(self.elapsed)))
-            # self.p2.setZValue(-1)
-            self.pI.getAxis('right').hide()
-            self.pI.getAxis('left').show()
+            # self.plotItem2.setZValue(-1)
+            self.plotItem1.getAxis('right').hide()
+            self.plotItem1.getAxis('left').show()
             self.updateViews()
 
         elif self.inc == 4:
-            # self.Plot.plot(self.elapsed, self.delay[0:len(self.elapsed)]*150)
+            # self.plot.plot(self.elapsed, self.delay[0:len(self.elapsed)]*150)
             self.nnframes = ((self.nnData[:, 0] - 1) / 2).astype(np.uint16)
             self.nntimes = self.elapsed[self.nnframes]
             self.nnline.setData(self.nntimes, self.nnData[:, 1])
@@ -177,33 +197,38 @@ class SATS_GUI(QWidget):
         elif self.inc == 10:
             self.deleteRects()
 
-        self.Plot.update()
+        self.plot.update()
 
     def updateViews(self):
+        """ adjust the two views to keep in sync when one of them is moved """
         # view has resized; update auxiliary views to match
-        self.p2.setGeometry(self.pI.vb.sceneBoundingRect())
+        self.plotItem2.setGeometry(self.plotItem1.vb.sceneBoundingRect())
 
         # need to re-update linked axes since this was called
         # incorrectly while views had different shapes.
         # (probably this should be handled in ViewBox.resizeEvent)
-        self.p2.linkedViewChanged(self.pI.vb, self.p2.XAxis)
+        self.plotItem2.linkedViewChanged(self.plotItem1.vb, self.plotItem2.XAxis)
 
     def incrementView(self, event):
+        """ React to a press of 'A' and advance the presentation """
         if event.key() == 65:
             self.inc = self.inc + 1
             print(self.inc)
         self.updatePlot()
 
     def deleteRects(self):
+        """ delete all rectangles in the scene. This is used when calling from NNGui to adjust for
+        ATS vs normal stacks. """
         for rect in self.rects:
-            self.Plot.removeItem(rect)
+            self.plot.removeItem(rect)
             del rect
         self.rects = []
 
 
 def main():
+    "Presentation mode of the GUI that can be advanced clicked the A button on the keyboard."
     app = QApplication(sys.argv)
-    gui = SATS_GUI()
+    gui = SatsGUI()
     gui.loadData('W:/Watchdog/microM_test/201208_cell_Int0s_30pc_488_50pc_561_band_5', None)
     gui.show()
 

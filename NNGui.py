@@ -23,15 +23,26 @@ from skimage import transform
 from tensorflow import keras
 
 from NNfeeder import prepareNNImages
-from nnIO import loadTifFolder, loadTifStack
+from NNio import loadTifFolder, loadTifStack
 from QtImageViewerMerge import QtImageViewerMerge
-from SATS_GUI import SATS_GUI
+from SatsGUI import SatsGUI
 
 # Adjust for different screen sizes
 QApplication.setAttribute(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
 
 
-class MultiPageTIFFViewerQt(QWidget):
+class NNGui(QWidget):
+    """Used to visualize and examine data taken using an adaptive temporal sampling approach.
+    Used for Mito/Drp and Bacteria/FtsZ and a neural network tought to detect division events
+    in mitochondria (see Mito2Drp1.py). Uses QtImageViewerMerge to visualize the channels and
+    SATS_GUI to visualize the temporal sampling of the data.
+    Loads stacks of interleaved images of the two channels or folders that were populated using
+    the ATS/smartiSIM approach in combination with network_Watchdog.py
+    Originally based on TifStackViewer
+
+    Args:
+        QWidget ([type]): [description]
+    """
 
     frameChanged = pyqtSignal([], [int])
 
@@ -43,28 +54,28 @@ class MultiPageTIFFViewerQt(QWidget):
         self.currentFrameIndex = None
 
         # Image frame viewer.
-        self.viewer_Orig = QtImageViewerMerge()
-        self.imageDrpOrig = self.viewer_Orig.addImage()
-        self.imageMitoOrig = self.viewer_Orig.addImage()
-        self.viewer_Orig.setLUT(self.imageDrpOrig, 'reds')
-        self.viewer_Orig.setLUT(self.imageMitoOrig, 'grey')
+        self.viewerOrig = QtImageViewerMerge()
+        self.imageItemDrpOrig = self.viewerOrig.addImage()
+        self.imageItemMitoOrig = self.viewerOrig.addImage()
+        self.viewerOrig.setLUT(self.imageItemDrpOrig, 'reds')
+        self.viewerOrig.setLUT(self.imageItemMitoOrig, 'grey')
 
-        self.viewer_Proc = QtImageViewerMerge()
-        self.imageDrpProc = self.viewer_Proc.addImage()
-        self.imageMitoProc = self.viewer_Proc.addImage()
-        self.viewer_Proc.setLUT(self.imageDrpProc, 'reds')
-        self.viewer_Proc.setLUT(self.imageMitoProc, 'grey')
+        self.viewerProc = QtImageViewerMerge()
+        self.imageItemDrpProc = self.viewerProc.addImage()
+        self.imageItemMitoProc = self.viewerProc.addImage()
+        self.viewerProc.setLUT(self.imageItemDrpProc, 'reds')
+        self.viewerProc.setLUT(self.imageItemMitoProc, 'grey')
 
-        self.viewer_nn = QtImageViewerMerge()
-        self.imageNN = self.viewer_nn.addImage()
-        self.viewer_nn.setLUT(self.imageNN, 'inferno')
+        self.viewerNN = QtImageViewerMerge()
+        self.imageItemNN = self.viewerNN.addImage()
+        self.viewerNN.setLUT(self.imageItemNN, 'inferno')
         self.loadBox = QGroupBox()
 
         # Connect the viewers
-        self.viewer_Orig.vb.setXLink(self.viewer_Proc.vb)
-        self.viewer_Orig.vb.setYLink(self.viewer_Proc.vb)
-        self.viewer_nn.vb.setXLink(self.viewer_Proc.vb)
-        self.viewer_nn.vb.setYLink(self.viewer_Proc.vb)
+        self.viewerOrig.vb.setXLink(self.viewerProc.vb)
+        self.viewerOrig.vb.setYLink(self.viewerProc.vb)
+        self.viewerNN.vb.setXLink(self.viewerProc.vb)
+        self.viewerNN.vb.setYLink(self.viewerProc.vb)
 
         # Slider and arrow buttons for frame traversal.
         self.sliderBox = QGroupBox()
@@ -78,11 +89,11 @@ class MultiPageTIFFViewerQt(QWidget):
         self.dataButton = QPushButton("load data")
         self.orderButton = QPushButton("order: Drp first")
         self.currentFrameLabel = QLabel('Frame')
-        self.LoadingStatusLabel = QLabel('')
+        self.loadingStatusLabel = QLabel('')
         # progress bar for loading data
         self.progress = QProgressBar(self)
 
-        self.outputPlot = SATS_GUI()
+        self.outputPlot = SatsGUI()
 
         pen = pg.mkPen(color='#AAAAAA', style=Qt.DashLine)
         self.frameLine = pg.InfiniteLine(pos=0.5, angle=90, pen=pen)
@@ -100,9 +111,9 @@ class MultiPageTIFFViewerQt(QWidget):
 
         # Layout.
         grid = QGridLayout(self)
-        grid.addWidget(self.viewer_Orig, 0, 0)
-        grid.addWidget(self.viewer_Proc, 0, 1)
-        grid.addWidget(self.viewer_nn, 0, 2)
+        grid.addWidget(self.viewerOrig, 0, 0)
+        grid.addWidget(self.viewerProc, 0, 1)
+        grid.addWidget(self.viewerNN, 0, 2)
         grid.addWidget(self.outputPlot, 1, 0, 1, 2)
         grid.addWidget(self.loadBox, 1, 2)
         grid.addWidget(self.sliderBox, 2, 0, 1, 3)
@@ -117,7 +128,7 @@ class MultiPageTIFFViewerQt(QWidget):
         gridBox.addWidget(self.modelButton, 0, 0)
         gridBox.addWidget(self.dataButton, 0, 1)
         gridBox.addWidget(self.orderButton, 0, 2)
-        gridBox.addWidget(self.LoadingStatusLabel, 1, 0, 1, 3)
+        gridBox.addWidget(self.loadingStatusLabel, 1, 0, 1, 3)
         gridBox.addWidget(self.progress, 2, 0, 1, 3)
         gridBox.addWidget(self.currentFrameLabel, 3, 0)
 
@@ -128,20 +139,22 @@ class MultiPageTIFFViewerQt(QWidget):
         # init variables
         self.mode = None
         self.model = None
-        self.image_drpOrig = None
-        self.image_mitoOrig = None
+        self.imageDrpOrig = None
+        self.imageMitoOrig = None
         self.nnOutput = None
         self.mitoDataFull = None
         self.drpDataFull = None
         self.maxPos = None
         self.nnRecalculated = None
 
-
         self.app = app
         self.order = 1
         self.linePen = pg.mkPen(color='#AAAAAA')
 
     def loadData(self):
+        """load tif stack or ATS folder into the GUI. Reports progress using a textbox and the
+        progress bar.
+        """
         # load images
         self.progress.setValue(0)
         nnImageSize = 128
@@ -152,23 +165,23 @@ class MultiPageTIFFViewerQt(QWidget):
         # order 0 is mito first
         fname = QFileDialog.getOpenFileName(
             self, 'Open file', 'C:/Users/stepp/Documents/data_raw/SmartMito/')
-        self.LoadingStatusLabel.setText('Loading images from files into arrays')
+        self.loadingStatusLabel.setText('Loading images from files into arrays')
         if not re.match(r'img_channel\d+_position\d+_time', os.path.basename(fname[0])) is None:
             print("Folder mode")
             self.mode = 'folder'
-            self.image_drpOrig, self.image_mitoOrig, self.nnOutput = loadTifFolder(
+            self.imageDrpOrig, self.imageMitoOrig, self.nnOutput = loadTifFolder(
                 os.path.dirname(fname[0]), resizeParam, self.order, self.progress, self.app)
         else:
             self.mode = 'stack'
             print("Stack mode")
-            self.image_drpOrig, self.image_mitoOrig = loadTifStack(fname[0], self.order)
+            self.imageDrpOrig, self.imageMitoOrig = loadTifStack(fname[0], self.order)
 
         print(fname[0])
 
-        print(self.image_mitoOrig.shape)
+        print(self.imageMitoOrig.shape)
         # Do NN for all images
-        frameNum = self.image_mitoOrig.shape[0]
-        postSize = round(self.image_mitoOrig.shape[1]*resizeParam)
+        frameNum = self.imageMitoOrig.shape[0]
+        postSize = round(self.imageMitoOrig.shape[1]*resizeParam)
         self.nnOutput = np.zeros((frameNum, postSize, postSize))
         self.mitoDataFull = np.zeros_like(self.nnOutput)
         self.drpDataFull = np.zeros_like(self.nnOutput)
@@ -178,31 +191,31 @@ class MultiPageTIFFViewerQt(QWidget):
         # set up the progress bar
         self.progress.setRange(0, frameNum-1)
 
-        self.LoadingStatusLabel.setText('Processing frames and running the network')
-        for frame in range(0, self.image_mitoOrig.shape[0]):
+        self.loadingStatusLabel.setText('Processing frames and running the network')
+        for frame in range(0, self.imageMitoOrig.shape[0]):
             inputData, positions = prepareNNImages(
-                self.image_mitoOrig[frame, :, :],
-                self.image_drpOrig[frame, :, :], nnImageSize)
+                self.imageMitoOrig[frame, :, :],
+                self.imageDrpOrig[frame, :, :], nnImageSize)
 
             # Do the NN calculation if there is not already a file there
             if self.model == 'folder' and np.max(self.nnOutput[frame]) > 0:
                 nnDataPres = 1
             else:
                 nnDataPres = 0
-                output_predict = self.model.predict_on_batch(inputData)
+                outputPredict = self.model.predict_on_batch(inputData)
                 self.nnRecalculated[frame] = 1
 
             i = 0
-            st = positions['stitch']
-            st1 = None if st == 0 else -st
-            for p in positions['px']:
+            st0 = positions['stitch']
+            st1 = None if st0 == 0 else -st0
+            for pos in positions['px']:
                 if nnDataPres == 0:
-                    self.nnOutput[frame, p[0]+st:p[2]-st, p[1]+st:p[3]-st] =\
-                                output_predict[i, st:st1, st:st1, 0]
-                self.mitoDataFull[frame, p[0]+st:p[2]-st, p[1]+st:p[3]-st] = \
-                    inputData[i, st:st1, st:st1, 0]
-                self.drpDataFull[frame, p[0]+st:p[2]-st, p[1]+st:p[3]-st] = \
-                    inputData[i, st:st1, st:st1, 1]
+                    self.nnOutput[frame, pos[0]+st0:pos[2]-st0, pos[1]+st0:pos[3]-st0] =\
+                                outputPredict[i, st0:st1, st0:st1, 0]
+                self.mitoDataFull[frame, pos[0]+st0:pos[2]-st0, pos[1]+st0:pos[3]-st0] = \
+                    inputData[i, st0:st1, st0:st1, 0]
+                self.drpDataFull[frame, pos[0]+st0:pos[2]-st0, pos[1]+st0:pos[3]-st0] = \
+                    inputData[i, st0:st1, st0:st1, 1]
                 i += 1
 
             outputData.append(np.max(self.nnOutput[frame, :, :]))
@@ -210,18 +223,18 @@ class MultiPageTIFFViewerQt(QWidget):
             self.progress.setValue(frame)
             self.app.processEvents()
 
-        self.LoadingStatusLabel.setText('Resize the original frames to fit the output')
+        self.loadingStatusLabel.setText('Resize the original frames to fit the output')
         print(postSize)
-        image_drpOrigScaled = np.zeros((self.image_drpOrig.shape[0], postSize, postSize))
-        image_mitoOrigScaled = np.zeros((self.image_drpOrig.shape[0], postSize, postSize))
-        for i in range(0, self.image_mitoOrig.shape[0]):
-            image_drpOrigScaled[i] = transform.rescale(self.image_drpOrig[i], resizeParam)
-            image_mitoOrigScaled[i] = transform.rescale(self.image_mitoOrig[i], resizeParam)
+        imageDrpOrigScaled = np.zeros((self.imageDrpOrig.shape[0], postSize, postSize))
+        imageMitoOrigScaled = np.zeros((self.imageDrpOrig.shape[0], postSize, postSize))
+        for i in range(0, self.imageMitoOrig.shape[0]):
+            imageDrpOrigScaled[i] = transform.rescale(self.imageDrpOrig[i], resizeParam)
+            imageMitoOrigScaled[i] = transform.rescale(self.imageMitoOrig[i], resizeParam)
             self.progress.setValue(i)
             self.app.processEvents()
-        self.image_drpOrig = np.array(image_drpOrigScaled)
-        self.image_mitoOrig = np.array(image_mitoOrigScaled)
-        print(self.image_mitoOrig.shape)
+        self.imageDrpOrig = np.array(imageDrpOrigScaled)
+        self.imageMitoOrig = np.array(imageMitoOrigScaled)
+        print(self.imageMitoOrig.shape)
 
         # Make a rolling mean of the output Data
         # N = 10
@@ -237,7 +250,7 @@ class MultiPageTIFFViewerQt(QWidget):
             self.outputPlot.nnline.setData(outputData)
             self.outputPlot.scatter.setData(range(0, len(outputData)), outputData)
         else:
-            self.LoadingStatusLabel.setText('Getting the timing data')
+            self.loadingStatusLabel.setText('Getting the timing data')
             self.outputPlot.loadData(os.path.dirname(fname[0]), self.progress, self.app)
             self.app.processEvents()
             for i in range(-1, 6):
@@ -248,19 +261,21 @@ class MultiPageTIFFViewerQt(QWidget):
 
         self.refreshGradients()
         self.onTimer()
-        self.LoadingStatusLabel.setText('Done')
-        self.viewer_Proc.vb.setRange(xRange=(0, postSize), yRange=(0, postSize))
+        self.loadingStatusLabel.setText('Done')
+        self.viewerProc.vb.setRange(xRange=(0, postSize), yRange=(0, postSize))
 
     def loadModel(self):
-        self.LoadingStatusLabel.setText('Loading Model')
+        """ Load a .h5 model generated using Keras """
+        self.loadingStatusLabel.setText('Loading Model')
         fname = QFileDialog.getOpenFileName(
             self, 'Open file', 'C:/Users/stepp/Documents/data_raw/SmartMito/',
             "Keras models (*.h5)")
         print(fname[0])
         self.model = keras.models.load_model(fname[0], compile=True)
-        self.LoadingStatusLabel.setText('Done')
+        self.loadingStatusLabel.setText('Done')
 
     def orderChange(self):
+        """ React to a press of the order button to read interleaved data into the right order """
         if self.order == 0:
             self.order = 1
             orderStr = 'order: Drp first'
@@ -271,51 +286,60 @@ class MultiPageTIFFViewerQt(QWidget):
         self.orderButton.setText(orderStr)
 
     def onTimer(self):
+        """ Reset the data in the GUI on the timer when button or slider is pressed """
         i = self.frameSlider.value()
-        self.imageMitoOrig.setImage(self.image_mitoOrig[i])
-        self.imageDrpOrig.setImage(self.image_drpOrig[i])
-        self.imageMitoProc.setImage(self.mitoDataFull[i])
-        self.imageDrpProc.setImage(self.drpDataFull[i])
-        self.imageNN.setImage(self.nnOutput[i])
+        self.imageItemMitoOrig.setImage(self.imageMitoOrig[i])
+        self.imageItemDrpOrig.setImage(self.imageDrpOrig[i])
+        self.imageItemMitoProc.setImage(self.mitoDataFull[i])
+        self.imageItemDrpProc.setImage(self.drpDataFull[i])
+        self.imageItemNN.setImage(self.nnOutput[i])
         self.currentFrameLabel.setText(str(i))
         if self.mode == 'stack':
             self.frameLine.setValue(i)
         else:
             self.frameLine.setValue(self.outputPlot.elapsed[i])
-        self.viewer_Orig.cross.setPosition([self.maxPos[i][0]])
-        self.viewer_Proc.cross.setPosition([self.maxPos[i][0]])
-        self.viewer_nn.cross.setPosition([self.maxPos[i][0]])
+        self.viewerOrig.cross.setPosition([self.maxPos[i][0]])
+        self.viewerProc.cross.setPosition([self.maxPos[i][0]])
+        self.viewerNN.cross.setPosition([self.maxPos[i][0]])
 
     def refreshGradients(self):
-        self.viewer_Orig.setImage(self.image_mitoOrig[0], 1)
-        self.viewer_Orig.setImage(self.image_drpOrig[0], 0)
-        self.viewer_Proc.setImage(self.mitoDataFull[0], 1)
-        self.viewer_Proc.setImage(self.drpDataFull[0], 0)
-        self.viewer_nn.setImage(self.nnOutput[0], 0)
+        """ refresh the images when a LUT was changed in the popup window """
+        self.viewerOrig.setImage(self.imageMitoOrig[0], 1)
+        self.viewerOrig.setImage(self.imageDrpOrig[0], 0)
+        self.viewerProc.setImage(self.mitoDataFull[0], 1)
+        self.viewerProc.setImage(self.drpDataFull[0], 0)
+        self.viewerNN.setImage(self.nnOutput[0], 0)
 
     def startTimer(self):
+        """ start Timer when slider is pressed """
         self.timer.start()
 
     def stopTimer(self):
+        """ stop timer when slider is released"""
         self.timer.stop()
 
     def nextFrame(self):
+        """ display next frame in all viewBoxes when '>' button is pressed """
         i = self.frameSlider.value()
         self.frameSlider.setValue(i + 1)
         self.onTimer()
 
     def prevFrame(self):
+        """ display previous frame in all viewBoxes when '<' button is pressed """
         i = self.frameSlider.value()
         self.frameSlider.setValue(i - 1)
         self.onTimer()
 
+
 def main():
+    """ main method to run and display the NNGui """
     app = QApplication(sys.argv)
     # app.setAttribute(QtCore.Qt.AA_Use96Dpi)
-    stackViewer = MultiPageTIFFViewerQt(app)
+    stackViewer = NNGui(app)
 
     stackViewer.showMaximized()
     sys.exit(app.exec_())
+
 
 if __name__ == '__main__':
     main()

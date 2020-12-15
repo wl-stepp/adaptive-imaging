@@ -15,6 +15,7 @@ output will go to the same NAS and is expected to be read by a Matlab program
 that runs on the same machine as microManager.
 """
 
+
 import os
 import re  # Regular expression module
 import sys
@@ -32,7 +33,7 @@ from watchdog.events import PatternMatchingEventHandler
 # Watchdog
 from watchdog.observers import Observer
 
-from binOutput import write_bin
+from BinOutput import writeBin
 # from imageTiles import getTilePositions_v2
 # Own modules
 from NNfeeder import prepareNNImages
@@ -40,7 +41,16 @@ from QtImageViewerMerge import QtImageViewerMerge
 
 
 class NetworkWatchdog(QWidget):
+    """Application used for the Feedback loop in the adaptive temporal sampling approach on the
+    iSIM. Uses 'Watchdogs' to monitor a network drive that images are written to from the iSIM using
+    the standard microManager save as images utility. Runs the neural network and writes the
+    generated output back to the network location for Matlab to read it. Works together with
+    FrameNumWrite in order to skip frames for keeping up when imaging fast. NNGui can be used for
+    visualizing the data generated.
 
+    Args:
+        QWidget ([type]): [description]
+    """
     frameChanged = pyqtSignal([], [int])
     refreshGUI = pyqtSignal([], [int])
     reinitGUI = pyqtSignal(int)
@@ -49,11 +59,11 @@ class NetworkWatchdog(QWidget):
 
         # Setting for the watchdogs
         patterns = ["*.tif"]
-        ignore_patterns = ["*.txt", "*.tiff"]
-        ignore_directories = True
-        case_sensitive = True
-        my_event_handler = PatternMatchingEventHandler(
-            patterns, ignore_patterns, ignore_directories, case_sensitive)
+        ignorePatterns = ["*.txt", "*.tiff"]
+        ignoreDirectories = True
+        caseSensitive = True
+        myEventHandler = PatternMatchingEventHandler(
+            patterns, ignorePatterns, ignoreDirectories, caseSensitive)
 
         # Loading the NN model
         self.nnImageSize = 128
@@ -92,38 +102,37 @@ class NetworkWatchdog(QWidget):
         self.linePen = pg.mkPen(color='#AAAAAA')
 
         # Assign the event handlers
-        my_event_handler.on_created = self.on_created
-        my_event_handler.on_deleted = self.on_deleted
-        my_event_handler.on_modified = self.on_modified
-        my_event_handler.on_moved = self.on_moved
-        self.refreshGUI.connect(self.refresh_GUI)
-        self.reinitGUI.connect(self.reinitialize_GUI)
+        myEventHandler.on_created = self.on_created
+        myEventHandler.on_deleted = self.on_deleted
+        myEventHandler.onModified = self.onModified
+        myEventHandler.onMoved = self.onMoved
+        self.refreshGUI.connect(self.refreshViewBoxes)
+        self.reinitGUI.connect(self.reinitializeViewBoxes)
         self.viewerNN.vb.setXLink(self.viewerMerge.vb)
         self.viewerNN.vb.setYLink(self.viewerMerge.vb)
 
         # More settings for the Watchdos
         path = "//lebnas1.epfl.ch/microsc125/Watchdog/"
         goRecursively = True
-        self.my_observer = Observer()
-        self.my_observer.schedule(
-            my_event_handler, path, recursive=goRecursively)
+        self.myObserver = Observer()
+        self.myObserver.schedule(
+            myEventHandler, path, recursive=goRecursively)
 
         # Init the model by running it once
         print('Initialize the model')
         self.model(np.random.randint(
             10, size=[1, self.nnImageSize, self.nnImageSize, 2]))
 
-        self.my_observer.start()
+        self.myObserver.start()
 
         print('All loaded, running...')
 
-        #Init variables
+        # Init variables
         self.mitoDataFull = None
         self.drpDataFull = None
         self.outputHistogram = None
         self.outputX = None
         self.maxPos = None
-
 
         self.frameNumOld = 100
         self.inputSizeOld = 0
@@ -133,13 +142,20 @@ class NetworkWatchdog(QWidget):
         for viewer in self.imageViewer:
             viewer.lines = []
 
-    def on_created(self, event):
-        pass
+    def onCreated(self, event):
+        """Do action when file is created in watchlocation"""
 
-    def on_deleted(self, event):
-        pass
+    def ondeleted(self, event):
+        """Do action when file is deleted in watchlocation"""
 
-    def on_modified(self, event):
+    def onModified(self, event):
+        """Run the Feedback loop when a new image is written by microManager to the network
+        location to be watched. Writes the calculated output value to a binary file that
+        Matlab on the iSIM can read to decide on the next framerate to use.
+
+        Args:
+            event ([type]): [description]
+        """
         size = os.path.getsize(event.src_path)
 
         # Extract the frame number from the filename
@@ -169,23 +185,23 @@ class NetworkWatchdog(QWidget):
             + str((frameNum-1)).zfill(9) + '_z000.tif'
         nnFile = 'img_channel000_position000_time' \
             + str((frameNum)).zfill(9) + '_nn.tiff'
-        mito_path = os.path.join(os.path.dirname(event.src_path), mitoFile)
-        nn_path = os.path.join(os.path.dirname(event.src_path), nnFile)
+        mitoPath = os.path.join(os.path.dirname(event.src_path), mitoFile)
+        nnPath = os.path.join(os.path.dirname(event.src_path), nnFile)
         txtFile = os.path.join(os.path.dirname(event.src_path), 'output.txt')
 
         # Mito is already written, so check size
-        mitoSize = os.path.getsize(mito_path)
+        mitoSize = os.path.getsize(mitoPath)
 
         if not size > mitoSize*0.95:
             return
 
         print('frame', int((frameNum-1)/2))
         # Read the mito image first, as it should already be written
-        # mitoFull = io.imread(mito_path)
+        # mitoFull = io.imread(mitoPath)
         # drpFull = io.imread(event.src_path)
         # switched for Drp > green mito > red
         mitoFull = io.imread(event.src_path)
-        drpFull = io.imread(mito_path)
+        drpFull = io.imread(mitoPath)
         print(mitoFull.shape)
 
         # If this is the first frame, reinitialize the plot
@@ -214,7 +230,7 @@ class NetworkWatchdog(QWidget):
             mitoFull, drpFull, self.nnImageSize)
         print(inputData.shape)
         # Calculate the prediction on the full batch of images
-        output_predict = self.model.predict_on_batch(inputData)
+        outputPredict = self.model.predict_on_batch(inputData)
 
         # Stitch the tiles back together (~2ms 512x512)
         i = 0
@@ -223,7 +239,7 @@ class NetworkWatchdog(QWidget):
         for position in positions['px']:
             self.outputDataFull[position[0]+stitch:position[2]-stitch,
                                 position[1]+stitch:position[3]-stitch] = \
-                output_predict[i, stitch:stitch1, stitch:stitch1, 0]
+                outputPredict[i, stitch:stitch1, stitch:stitch1, 0]
             self.mitoDataFull[position[0]+stitch:position[2]-stitch,
                               position[1]+stitch:position[3]-stitch] = \
                 inputData[i, stitch:stitch1, stitch:stitch1, 0]
@@ -240,9 +256,9 @@ class NetworkWatchdog(QWidget):
             outputDataThresh[mask] = self.outputDataFull[mask]
             output = int(round(np.sum(outputDataThresh)))
         elif approach == 2:
-            n = 4
+            numPixels = 4
             output = 0
-            for i in range(0, n):
+            for i in range(0, numPixels):
                 output = output + np.max(self.outputDataFull)
                 maxX = np.argmax(self.outputDataFull, axis=0)
                 maxY = np.argmax(self.outputDataFull, axis=1)
@@ -256,30 +272,31 @@ class NetworkWatchdog(QWidget):
 
         self.maxPos = list(zip(*np.where(self.outputDataFull == np.max(self.outputDataFull))))
 
-        now_str = datetime.now()
-        h = now_str.strftime("%H")
-        m = now_str.strftime("%M")
-        s = now_str.strftime("%S")
-        ms = now_str.strftime("%f")
-        print(ms)
-        tX = (int(h)*60*60*1000 + int(m)*60*1000 + int(s)*1000 + int(ms[:2]))/60/60/1000
-        print(tX)
+        nowStr = datetime.now()
+        hours = nowStr.strftime("%H")
+        minutes = nowStr.strftime("%M")
+        seconds = nowStr.strftime("%S")
+        millis = nowStr.strftime("%f")
+        print(millis)
+        timeX = (int(hours)*60*60*1000 + int(minutes)*60*1000 +
+                 int(seconds)*1000 + int(millis[:2]))/60/60/1000
+        print(timeX)
 
         lengthCache = 100
         if len(self.outputHistogram) > lengthCache:
             self.outputX = self.outputX[1:]
             self.outputHistogram = self.outputHistogram[1:]
         self.outputHistogram.append(output)
-        self.outputX.append(tX)  # (frameNum-1)/2)
+        self.outputX.append(timeX)  # (frameNum-1)/2)
 
         # Write output to binary for Matlab to read
-        write_bin(output, 0)
+        writeBin(output, 0)
         # Write output to txt file for later
-        f = open(txtFile, 'a')
-        f.write('%d, %d\n' % (frameNum, output))
-        f.close()
+        file = open(txtFile, 'a')
+        file.write('%d, %d\n' % (frameNum, output))
+        file.close()
         # Save the nn image
-        io.imsave(nn_path, self.outputDataFull.astype(np.uint8), check_contrast=False)
+        io.imsave(nnPath, self.outputDataFull.astype(np.uint8), check_contrast=False)
 
         # Prepare images for plot and emit plotting event
         # self.mitoDisp = gray2qimage(self.mitoDataFull, normalize=True)
@@ -296,7 +313,8 @@ class NetworkWatchdog(QWidget):
         self.folderNameOld = folderName
         print('output generated   ', int(output), '\n')
 
-    def refresh_GUI(self):
+    def refreshViewBoxes(self):
+        """ Update the merged vies and the output plot when a calculation has finished. """
         self.imageMito.setImage(self.mitoDataFull)
         self.imageDrp.setImage(self.drpDataFull)
         self.imageNN.setImage(self.outputDataFull)
@@ -305,7 +323,9 @@ class NetworkWatchdog(QWidget):
         self.viewerNN.cross.setPosition(self.maxPos)
         self.viewerOutput.enableAutoRange()
 
-    def reinitialize_GUI(self, inputSize):
+    def reinitializeViewBoxes(self, inputSize):
+        """ reinitialize the GUI if data with a new size is processed. This also used to write the
+        grid lines that correspond to the tiles used to feed the neural network. """
         # This was used to draw a grid on the ViewBox that shows the tiling. Will have to redo for
         # the new plotting environment
         # positions = getTilePositions_v2(
@@ -321,21 +341,24 @@ class NetworkWatchdog(QWidget):
         #         line.setZValue(100)
         self.viewerMerge.vb.setRange(xRange=(0, inputSize), yRange=(0, inputSize))
 
-    def on_moved(self, event):
-        pass
+    def onMoved(self, event):
+        """ start when a file was used in the watchlocation. Could be removed(?) """
 
     def closeEvent(self):
+        """ Terminate the watchdogs and clean up when the windows of the GUI is closed """
         print('Watchdogs stopped')
-        self.my_observer.stop()
-        self.my_observer.join()
+        self.myObserver.stop()
+        self.myObserver.join()
 
 
 def main():
+    """Launching the main GUI for SATS mode in smartiSIM"""
     app = QApplication(sys.argv)
-    Watchdog = NetworkWatchdog()
+    watchdog = NetworkWatchdog()
 
-    Watchdog.show()
+    watchdog.show()
     sys.exit(app.exec_())
+
 
 if __name__ == '__main__':
     main()

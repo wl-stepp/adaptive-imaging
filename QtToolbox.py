@@ -1,50 +1,54 @@
-import matplotlib
+""" Module that implements some custom functions that are often used with Qt GUIs. """
+
 import numpy as np
 import pyqtgraph
 from matplotlib import cm
 
 
-def getImageItemcolormap(name='hot', alpha=False, opacity=(0.3, 0.85), saturation=255):
-    colormap = cm.get_cmap(name)
-    colormap._init()
-    colormap._lut = colormap._lut[:255]
+def getImageItemcolormap(name='hot', alpha=False, opacity=(0.3, 0.85)):
+    """ Get a LUT that can be used with a QImageItem from a matplotlib LUT name """
+    myColormap = cm.ScalarMappable()
+    myColormap.set_cmap(name)
+    myColormap = myColormap.get_array()
+    myColormap = myColormap[:255]
     if alpha:
-        a = np.linspace(opacity[0], opacity[1], 255)
-        colormap._lut[:, 3] = a
-    lut = (colormap._lut * 255).view(np.ndarray).astype(int)
+        alpha = np.linspace(opacity[0], opacity[1], 255)
+        myColormap[:, 3] = alpha
+    lut = (myColormap * 255).view(np.ndarray).astype(int)
     return lut
 
 
 def getQtcolormap(name='hot'):
-    colormap = cm.get_cmap(name)
-    colormap._init()
-    lut = (colormap._lut * 255).view(np.ndarray).astype(int)
-    lut = [qRgb(i[0], i[1], i[2]) for i in lut]
+    """ Deprecated used to get a LUT consisting of QColors """
+    myColormap = cm.ScalarMappable()
+    myColormap.set_cmap(name)
+    myColormap = myColormap.get_array()
+    lut = (myColormap * 255).view(np.ndarray).astype(int)
+    # lut = [qRgb(i[0], i[1], i[2]) for i in lut]
     return lut
 
 
 def getImageViewcolormap(name='hot'):
-    """This can be used in a pyqtgrah ImageView to set a colormap that"s known from matplotlib
+    """This can be used in a pyqtgrah ImageView to set a colormap that's known from matplotlib
 
     Args:
-        name (str, optional): [description]. Defaults to 'hot'.
+        name (str, optional): name of the matplotlib colormap. Defaults to 'hot'.
 
     Returns:
         [type]: [description]
     """
-    numColors = 5
-    colormap = cm.get_cmap(name, numColors)
-    colormap._init()
-    lut = []
-    pos = np.linspace(0, 1, num=numColors)
-    a = (np.linspace(0, 1, num=numColors)*255).astype(int)
-    a = np.append(a, [255, 255, 0])
-    lut = (colormap._lut * 255).view(np.ndarray).astype(int)
-    lut[:, 3] = a
+    myColormap = cm.ScalarMappable()
+    myColormap.set_cmap(name)
+    myColormap = myColormap.get_array()
+    pos = np.linspace(0, 1, num=myColormap.shape[0])
+    alpha = (np.linspace(0, 1, num=myColormap.shape[0])*255).astype(int)
+    alpha = np.append(alpha, [255, 255, 0])
+    lut = (myColormap * 255).view(np.ndarray).astype(int)
+    lut[:, 3] = alpha
     print(lut[:, 3])
     lut = pyqtgraph.ColorMap(pos, lut)
     return lut
 
 
 if __name__ == '__main__':
-    getPyQtcolormap('Reds')
+    pass

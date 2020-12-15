@@ -15,6 +15,8 @@ from skimage import io
 
 
 def loadiSIMmetadata(folder):
+    """  Load the information written by matlab about the generated DAQ signals for all in folder
+    """
     delay = []
     for name in sorted(glob.glob(folder + '/iSIMmetadata*.txt')):
         data = np.genfromtxt(name)
@@ -28,6 +30,7 @@ def loadiSIMmetadata(folder):
 
 
 def loadTIF(folder):
+    """ deprecated was used for testing Metadata import """
     file = 'img_channel000_position000_time000000001_z000.tif'
     filePath = folder + '/' + file
 
@@ -39,6 +42,7 @@ def loadTIF(folder):
 
 
 def loadElapsedTime(folder, progress=None, app=None):
+    """ get the Elapsed time for all files in folder """
     elapsed = []
     fileList = glob.glob(folder + '/img_*.tif')
     numFrames = int(len(fileList)/2)
@@ -60,6 +64,7 @@ def loadElapsedTime(folder, progress=None, app=None):
 
 
 def loadNNData(folder):
+    """ load the csv file written by NetworkWatchdog when processing live ATS data """
     file = 'output.txt'
     filePath = folder + '/' + file
     nnData = np.genfromtxt(filePath, delimiter=',')
@@ -67,10 +72,11 @@ def loadNNData(folder):
 
 
 def resaveNN(folder):
+    """ Function to resave files that have been written in float format """
     for filePath in glob.glob(folder + '/img_*_nn.tiff'):
         img = tifffile.imread(filePath)
-        new_file = filePath[:-5] + '_fiji.tiff'
-        tifffile.imsave(new_file, img.astype(np.uint8))
+        newFile = filePath[:-5] + '_fiji.tiff'
+        tifffile.imsave(newFile, img.astype(np.uint8))
         print(filePath)
 
 
@@ -129,14 +135,15 @@ def loadTifFolder(folder, resizeParam=1, order=0, progress=None, app=None):
         stack1 = np.array(stack1)
         stack2 = np.array(stack2)
     else:
-        stack1_save = stack1
+        stack1Save = stack1
         stack1 = np.array(stack2)
-        stack2 = np.array(stack1_save)
+        stack2 = np.array(stack1Save)
     print(stack1.shape)
     return stack1, stack2, stackNN
 
 
 def loadTifStack(stack, order=0):
+    """ Load a tif stack and deinterleave depending on the order (0 or 1) """
     start1 = order
     start2 = np.abs(order-1)
     imageMitoOrig = io.imread(stack)
@@ -146,6 +153,7 @@ def loadTifStack(stack, order=0):
 
 
 def main():
+    """ Main method testing loadTifFolder """
     folder = (
         'W:/Watchdog/microM_test/201208_cell_Int0s_30pc_488_50pc_561_band_9_nodecon')
     stack1 = loadTifFolder(folder, 512/741, 0)[0]
@@ -153,6 +161,7 @@ def main():
     plt.imshow(stack1[5])
     plt.show()
     print('Done')
+
 
 if __name__ == '__main__':
     main()
