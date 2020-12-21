@@ -192,6 +192,10 @@ class NNGui(QWidget):
         # set up the progress bar
         self.progress.setRange(0, data.frameNum-1)
 
+    def updateProgress(self, rangeMax):
+        """ Set the range of the progress bar """
+        self.progress.setMaximum(rangeMax)
+
     def loadDataThread(self):
         """ Create and start the thread to load data """
         worker = LoadingThread(self)
@@ -203,6 +207,7 @@ class NNGui(QWidget):
         worker.setLabel.connect(self.setLabelString)
         worker.setLog.connect(self.setLogString)
         worker.loadingDone.connect(self.receiveData)
+        worker.updateProgressRange.connect(self.updateProgress)
         thread.started.connect(worker.work)
         thread.start()
 
@@ -279,6 +284,7 @@ class LoadingThread(QObject):
     setLabel = pyqtSignal(str)
     loadingDone = pyqtSignal(QObject)
     setLog = pyqtSignal(str)
+    updateProgressRange = pyqtSignal(int)
 
     def __init__(self, data):
         super().__init__()
@@ -294,46 +300,58 @@ class LoadingThread(QObject):
         self.postSize = None
         self.frameNum = None
         self.maxPos = []
+        self.folder = None
+        self.nnImageSize = 128
+        self.pixelCalib = 56  # nm per pixel
+        self.resizeParam = self.pixelCalib/81  # no unit
 
     @pyqtSlot()
     def work(self):
         """ Function used to start the loading in the thread load """
+        self.setLog.emit('\n\nLoading thread started')
+        self._getFolder(self.data)
         newData = self._loadData(self.data)
         self.loadingDone.emit(newData)
+
+    def _getFolder(self, data):
+        """Getting GUI folder input, determine data type and load accordingly
+        order 0 is mito first"""
+        fname = QFileDialog.getOpenFileName(QWidget(), 'Open file', data.folder)
+        self.setLabel.emit('Loading images from files into arrays')
+        if not re.match(r'img_channel\d+_position\d+_time', os.path.basename(fname[0])) is None:
+            # Check for microManager file like name and if so load as files in folder
+            self.setLog.emit("Folder mode")
+            self.mode = 'folder'
+            self.imageDrpOrig, self.imageMitoOrig, self.nnOutput = loadTifFolder(
+                os.path.dirname(fname[0]), self.resizeParam, data.order, data.progress)
+            # Save this to go back to when the user wants to load another file
+            data.folder = os.path.dirname(os.path.dirname(fname[0]))
+            # Save this to use in SATS_gui
+            self.folder = os.path.dirname(fname[0])
+            self.setLog.emit(os.path.dirname(fname[0]))
+        else:
+            # If not singular files in folder, load as interleaved stack
+            self.mode = 'stack'
+            self.setLog.emit("Stack mode")
+            self.imageDrpOrig, self.imageMitoOrig = loadTifStack(fname[0], data.order)
+            # Save this to go back to when the user wants to load another file
+            data.folder = os.path.dirname(fname[0])
+            self.folder = data.folder
+            self.setLog.emit(fname[0])
+        self.updateProgressRange.emit(self.imageDrpOrig.shape[0])
 
     def _loadData(self, data):
         """load tif stack or ATS folder into the GUI. Reports progress using a textbox and the
         progress bar.
         """
-        self.setLog.emit('Loading thread started')
+
         # load images
         self.change_progress.emit(0)
-        nnImageSize = 128
-        pixelCalib = 56  # nm per pixel
-        resizeParam = pixelCalib/81  # no unit
-
-        # Loading different types of data
-        # order 0 is mito first
-        fname = QFileDialog.getOpenFileName(QWidget(), 'Open file', data.folder)
-        self.setLabel.emit('Loading images from files into arrays')
-        if not re.match(r'img_channel\d+_position\d+_time', os.path.basename(fname[0])) is None:
-            self.setLog.emit("Folder mode")
-            self.mode = 'folder'
-            self.imageDrpOrig, self.imageMitoOrig, self.nnOutput = loadTifFolder(
-                os.path.dirname(fname[0]), resizeParam, data.order, data.progress, QApplication)
-            data.folder = os.path.dirname(os.path.dirname(fname[0]))
-            self.setLog.emit(os.path.dirname(fname[0]))
-        else:
-            self.mode = 'stack'
-            self.setLog.emit("Stack mode")
-            self.imageDrpOrig, self.imageMitoOrig = loadTifStack(fname[0], data.order)
-            data.folder = os.path.dirname(fname[0])
-            self.setLog.emit(fname[0])
 
         self.setLog.emit('input shape {}'.format(self.imageMitoOrig.shape))
         # Do NN for all images
         self.frameNum = self.imageMitoOrig.shape[0]
-        self.postSize = round(self.imageMitoOrig.shape[1]*resizeParam)
+        self.postSize = round(self.imageMitoOrig.shape[1]*self.resizeParam)
         self.nnOutput = np.zeros((self.frameNum, self.postSize, self.postSize))
         self.mitoDataFull = np.zeros_like(self.nnOutput)
         self.drpDataFull = np.zeros_like(self.nnOutput)
@@ -344,7 +362,7 @@ class LoadingThread(QObject):
         for frame in range(0, self.imageMitoOrig.shape[0]):
             inputData, positions = prepareNNImages(
                 self.imageMitoOrig[frame, :, :],
-                self.imageDrpOrig[frame, :, :], nnImageSize)
+                self.imageDrpOrig[frame, :, :], self.nnImageSize)
 
             # Do the NN calculation if there is not already a file there
             if self.mode == 'folder' and np.max(self.nnOutput[frame]) > 0:
@@ -377,9 +395,9 @@ class LoadingThread(QObject):
         imageDrpOrigScaled = np.zeros((self.imageDrpOrig.shape[0], self.postSize, self.postSize))
         imageMitoOrigScaled = np.zeros((self.imageDrpOrig.shape[0], self.postSize, self.postSize))
         for i in range(0, self.imageMitoOrig.shape[0]):
-            imageDrpOrigScaled[i] = transform.rescale(self.imageDrpOrig[i], resizeParam,
+            imageDrpOrigScaled[i] = transform.rescale(self.imageDrpOrig[i], self.resizeParam,
                                                       anti_aliasing=True, preserve_range=True)
-            imageMitoOrigScaled[i] = transform.rescale(self.imageMitoOrig[i], resizeParam,
+            imageMitoOrigScaled[i] = transform.rescale(self.imageMitoOrig[i], self.resizeParam,
                                                        anti_aliasing=True, preserve_range=True)
             self.change_progress.emit(i)
             QApplication.processEvents()
@@ -401,7 +419,7 @@ class LoadingThread(QObject):
             data.outputPlot.scatter.setData(range(0, len(outputData)), outputData)
         else:
             self.setLabel.emit('Getting the timing data')
-            data.outputPlot.loadData(os.path.dirname(fname[0]), data.progress, data.app)
+            data.outputPlot.loadData(self.folder, data.progress, data.app)
             QApplication.processEvents()
             for i in range(-1, 6):
                 data.outputPlot.inc = i

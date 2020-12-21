@@ -3,3 +3,4 @@ __pycache__/
 settings.json
 *.pylintrc
 tf2_4
+Tests

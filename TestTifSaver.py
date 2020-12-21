@@ -102,7 +102,7 @@ def main():
         io.imsave(drpPath, drp[item, :, :].astype(np.uint16),
                   check_contrast=False)
         time2 = time.perf_counter()
-        time.sleep(np.max([0, .3 - (time2 - time1)]))
+        time.sleep(np.max([0, .5 - (time2 - time1)]))
         i = i + 1
 
     time.sleep(3)

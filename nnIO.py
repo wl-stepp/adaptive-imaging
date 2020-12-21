@@ -80,7 +80,7 @@ def resaveNN(folder):
         print(filePath)
 
 
-def loadTifFolder(folder, resizeParam=1, order=0, progress=None, app=None):
+def loadTifFolder(folder, resizeParam=1, order=0, progress=None) -> np.ndarray:
     """Function to load SATS data from a folder with the individual tif files written by
     microManager. Inbetween there might be neural network images that are also loaded into
     an array. Mainly used with NN_GUI_v2.py
@@ -125,8 +125,6 @@ def loadTifFolder(folder, resizeParam=1, order=0, progress=None, app=None):
         else:
             stack2[frame] = io.imread(filePath)
 
-        if app is not None:
-            app.processEvents()
         # Progress the bar if available
         if progress is not None:
             progress.setValue(frameNum)
@@ -138,7 +136,7 @@ def loadTifFolder(folder, resizeParam=1, order=0, progress=None, app=None):
         stack1Save = stack1
         stack1 = np.array(stack2)
         stack2 = np.array(stack1Save)
-    print(stack1.shape)
+
     return stack1, stack2, stackNN
 
 

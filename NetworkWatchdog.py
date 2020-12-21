@@ -25,7 +25,7 @@ from datetime import datetime
 import numpy as np
 import pyqtgraph as pg
 # Qt display imports
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import QApplication, QGridLayout, QWidget
 from skimage import io
 # Tensorflow
@@ -87,14 +87,19 @@ class NetworkWatchdog(QWidget):
         self.viewerMerge = QtImageViewerMerge()
         self.imageDrp = self.viewerMerge.addImage()
         self.imageMito = self.viewerMerge.addImage()
+        self.viewerMerge.setLUT(self.imageDrp, 'reds')
+        self.viewerMerge.setLUT(self.imageMito, 'grey')
         self.viewerNN = QtImageViewerMerge()
         self.imageNN = self.viewerNN.addImage()
         self.viewerNN.setLUT(self.imageNN, 'inferno')
 
         self.viewerOutput = pg.PlotWidget()
         self.outputPlot = self.viewerOutput.plot()
-        self.viewerMerge.setLUT(self.imageDrp, 'reds')
-        self.viewerMerge.setLUT(self.imageMito, 'grey')
+        pen = pg.mkPen(color='#FF0000', style=Qt.DashLine)
+        self.thrLine1 = pg.InfiniteLine(pos=90, angle=0, pen=pen)
+        self.thrLine2 = pg.InfiniteLine(pos=70, angle=0, pen=pen)
+        self.viewerOutput.addItem(self.thrLine1)
+        self.viewerOutput.addItem(self.thrLine2)
 
         grid = QGridLayout(self)
         grid.addWidget(self.viewerMerge, 1, 0)
@@ -229,7 +234,7 @@ class NetworkWatchdog(QWidget):
         # Preprocess the data and make tiles if necessary
         inputData, positions = prepareNNImages(
             mitoFull, drpFull, self.nnImageSize)
-        print(inputData.shape)
+        # print(inputData.shape)
         # Calculate the prediction on the full batch of images
         outputPredict = self.model.predict_on_batch(inputData)
 
@@ -278,10 +283,8 @@ class NetworkWatchdog(QWidget):
         minutes = nowStr.strftime("%M")
         seconds = nowStr.strftime("%S")
         millis = nowStr.strftime("%f")
-        print(millis)
         timeX = (int(hours)*60*60*1000 + int(minutes)*60*1000 +
-                 int(seconds)*1000 + int(millis[:2]))/60/60/1000
-        print(timeX)
+                 int(seconds)*1000 + int(millis[:3]))/60/60/1000
 
         lengthCache = 100
         if len(self.outputHistogram) > lengthCache:
