@@ -4,6 +4,8 @@ This is a GUI that runs a neural network on the input data and displays
 original data and the result in a scrollable form.
 v1 was made using matplotlib. Unfortunately that is very slow, so here
 I try to use pyqtgraph for faster performance
+Sources:
+https://stackoverflow.com/questions/41526832/pyqt5-qthread-signal-not-working-gui-freeze
 
 Created on Mon Oct  5 12:18:48 2020
 
@@ -15,10 +17,10 @@ import sys
 
 import numpy as np
 import pyqtgraph as pg
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import QObject, Qt, QThread, QTimer, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import (QApplication, QFileDialog, QGridLayout, QGroupBox,
-                             QLabel, QProgressBar, QPushButton, QSlider,
-                             QWidget)
+                             QLabel, QPlainTextEdit, QProgressBar, QPushButton,
+                             QSlider, QWidget)
 from skimage import transform
 from tensorflow import keras
 
@@ -81,6 +83,7 @@ class NNGui(QWidget):
         self.sliderBox = QGroupBox()
         self.frameSlider = QSlider(Qt.Horizontal)
         self.frameSlider.setMinimumHeight(20)
+        self.frameSlider.setValue(0)
         self.prevFrameButton = QPushButton("<")
         self.nextFrameButton = QPushButton(">")
 
@@ -92,6 +95,7 @@ class NNGui(QWidget):
         self.loadingStatusLabel = QLabel('')
         # progress bar for loading data
         self.progress = QProgressBar(self)
+        self.log = QPlainTextEdit(self)
 
         self.outputPlot = SatsGUI()
 
@@ -101,13 +105,10 @@ class NNGui(QWidget):
 
         # Connect functions to the interactive elements
         self.modelButton.clicked.connect(self.loadModel)
-        self.dataButton.clicked.connect(self.loadData)
+        self.dataButton.clicked.connect(self.loadDataThread)
         self.orderButton.clicked.connect(self.orderChange)
         self.prevFrameButton.clicked.connect(self.prevFrame)
         self.nextFrameButton.clicked.connect(self.nextFrame)
-
-        self.frameSlider.sliderPressed.connect(self.startTimer)
-        self.frameSlider.sliderReleased.connect(self.stopTimer)
 
         # Layout.
         grid = QGridLayout(self)
@@ -131,10 +132,16 @@ class NNGui(QWidget):
         gridBox.addWidget(self.loadingStatusLabel, 1, 0, 1, 3)
         gridBox.addWidget(self.progress, 2, 0, 1, 3)
         gridBox.addWidget(self.currentFrameLabel, 3, 0)
+        gridBox.addWidget(self.log, 4, 0, 1, 3)
+
+        self.threads = []
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.onTimer)
         self.timer.setInterval(20)
+
+        self.frameSlider.sliderPressed.connect(self.startTimer)
+        self.frameSlider.sliderReleased.connect(self.stopTimer)
 
         # init variables
         self.mode = None
@@ -146,63 +153,205 @@ class NNGui(QWidget):
         self.drpDataFull = None
         self.maxPos = None
         self.nnRecalculated = None
+        self.folder = 'C:/Users/stepp/Documents/data_raw/SmartMito/'
 
         self.app = app
         self.order = 1
         self.linePen = pg.mkPen(color='#AAAAAA')
 
-    def loadData(self):
+    def setProgressValue(self, progress):
+        """ Set the progress value from the loading thread """
+        self.progress.setValue(progress)
+
+    def setLabelString(self, message):
+        """ Set the Satus Label when called from loading thread """
+        self.loadingStatusLabel.setText(message)
+
+    def setLogString(self, message):
+        """ Append to the log signaled from loading thread"""
+        self.log.appendPlainText(message)
+
+    def receiveData(self, data):
+        """ Receive the data from the loading worker """
+        self.mode = data.mode
+        self.imageMitoOrig = data.imageMitoOrig
+        self.imageDrpOrig = data.imageDrpOrig
+        self.mitoDataFull = data.mitoDataFull
+        self.drpDataFull = data.drpDataFull
+        self.nnOutput = data.nnOutput
+        self.maxPos = data.maxPos
+        self.frameSlider.setMaximum(self.nnOutput.shape[0]-1)
+        self.refreshGradients()
+        self.onTimer()
+        self.viewerOrig.resetRanges()
+        self.viewerProc.resetRanges()
+        self.viewerNN.resetRanges()
+        self.loadingStatusLabel.setText('Done')
+        self.viewerProc.viewBox.setRange(xRange=(0, data.postSize), yRange=(0, data.postSize))
+
+        # set up the progress bar
+        self.progress.setRange(0, data.frameNum-1)
+
+    def loadDataThread(self):
+        """ Create and start the thread to load data """
+        worker = LoadingThread(self)
+        thread = QThread()
+        thread.setObjectName('Data Loader')
+        self.threads.append((thread, worker))
+        worker.moveToThread(thread)
+        worker.change_progress.connect(self.setProgressValue)
+        worker.setLabel.connect(self.setLabelString)
+        worker.setLog.connect(self.setLogString)
+        worker.loadingDone.connect(self.receiveData)
+        thread.started.connect(worker.work)
+        thread.start()
+
+    def loadModel(self):
+        """ Load a .h5 model generated using Keras """
+        self.loadingStatusLabel.setText('Loading Model')
+        fname = QFileDialog.getOpenFileName(
+            self, 'Open file', 'C:/Users/stepp/Documents/data_raw/SmartMito/',
+            "Keras models (*.h5)")
+        self.model = keras.models.load_model(fname[0], compile=True)
+        self.loadingStatusLabel.setText('Done')
+        self.log.appendPlainText(fname[0])
+
+    def orderChange(self):
+        """ React to a press of the order button to read interleaved data into the right order """
+        if self.order == 0:
+            self.order = 1
+            orderStr = 'order: Drp first'
+        else:
+            self.order = 0
+            orderStr = 'order: Mito first'
+        self.setLogString('Set ' + orderStr)
+        self.orderButton.setText(orderStr)
+
+    def onTimer(self):
+        """ Reset the data in the GUI on the timer when button or slider is pressed """
+        i = self.frameSlider.value()
+        self.viewerOrig.setImage(self.imageMitoOrig[i], 1)
+        self.viewerOrig.setImage(self.imageDrpOrig[i], 0)
+        self.viewerProc.setImage(self.mitoDataFull[i], 1)
+        self.viewerProc.setImage(self.drpDataFull[i], 0)
+        self.viewerNN.setImage(self.nnOutput[i], 0)
+        self.currentFrameLabel.setText(str(i))
+        if self.mode == 'stack':
+            self.frameLine.setValue(i)
+        else:
+            self.frameLine.setValue(self.outputPlot.elapsed[i])
+        self.viewerOrig.cross.setPosition([self.maxPos[i][0]])
+        self.viewerProc.cross.setPosition([self.maxPos[i][0]])
+        self.viewerNN.cross.setPosition([self.maxPos[i][0]])
+
+    def startTimer(self):
+        """ start Timer when slider is pressed """
+        self.timer.start()
+
+    def stopTimer(self):
+        """ stop timer when slider is released"""
+        self.timer.stop()
+
+    def refreshGradients(self):
+        """ refresh the images when a LUT was changed in the popup window """
+        self.viewerOrig.setImage(self.imageMitoOrig[0], 1)
+        self.viewerOrig.setImage(self.imageDrpOrig[0], 0)
+        self.viewerProc.setImage(self.mitoDataFull[0], 1)
+        self.viewerProc.setImage(self.drpDataFull[0], 0)
+        self.viewerNN.setImage(self.nnOutput[0], 0)
+
+    def nextFrame(self):
+        """ display next frame in all viewBoxes when '>' button is pressed """
+        i = self.frameSlider.value()
+        self.frameSlider.setValue(i + 1)
+        self.onTimer()
+
+    def prevFrame(self):
+        """ display previous frame in all viewBoxes when '<' button is pressed """
+        i = self.frameSlider.value()
+        self.frameSlider.setValue(i - 1)
+        self.onTimer()
+
+
+class LoadingThread(QObject):
+    """ Extra Thread for loading data """
+    change_progress = pyqtSignal(int)
+    setLabel = pyqtSignal(str)
+    loadingDone = pyqtSignal(QObject)
+    setLog = pyqtSignal(str)
+
+    def __init__(self, data):
+        super().__init__()
+        self.data = data
+        self.mode = None
+        self.imageDrpOrig = None
+        self.imageMitoOrig = None
+        self.nnOutput = None
+        self.nnOutput = None
+        self.mitoDataFull = None
+        self.drpDataFull = None
+        self.nnRecalculated = None
+        self.postSize = None
+        self.frameNum = None
+        self.maxPos = []
+
+    @pyqtSlot()
+    def work(self):
+        """ Function used to start the loading in the thread load """
+        newData = self._loadData(self.data)
+        self.loadingDone.emit(newData)
+
+    def _loadData(self, data):
         """load tif stack or ATS folder into the GUI. Reports progress using a textbox and the
         progress bar.
         """
+        self.setLog.emit('Loading thread started')
         # load images
-        self.progress.setValue(0)
+        self.change_progress.emit(0)
         nnImageSize = 128
         pixelCalib = 56  # nm per pixel
         resizeParam = pixelCalib/81  # no unit
 
         # Loading different types of data
         # order 0 is mito first
-        fname = QFileDialog.getOpenFileName(
-            self, 'Open file', 'C:/Users/stepp/Documents/data_raw/SmartMito/')
-        self.loadingStatusLabel.setText('Loading images from files into arrays')
+        fname = QFileDialog.getOpenFileName(QWidget(), 'Open file', data.folder)
+        self.setLabel.emit('Loading images from files into arrays')
         if not re.match(r'img_channel\d+_position\d+_time', os.path.basename(fname[0])) is None:
-            print("Folder mode")
+            self.setLog.emit("Folder mode")
             self.mode = 'folder'
             self.imageDrpOrig, self.imageMitoOrig, self.nnOutput = loadTifFolder(
-                os.path.dirname(fname[0]), resizeParam, self.order, self.progress, self.app)
+                os.path.dirname(fname[0]), resizeParam, data.order, data.progress, QApplication)
+            data.folder = os.path.dirname(os.path.dirname(fname[0]))
+            self.setLog.emit(os.path.dirname(fname[0]))
         else:
             self.mode = 'stack'
-            print("Stack mode")
-            self.imageDrpOrig, self.imageMitoOrig = loadTifStack(fname[0], self.order)
+            self.setLog.emit("Stack mode")
+            self.imageDrpOrig, self.imageMitoOrig = loadTifStack(fname[0], data.order)
+            data.folder = os.path.dirname(fname[0])
+            self.setLog.emit(fname[0])
 
-        print(fname[0])
-
-        print(self.imageMitoOrig.shape)
+        self.setLog.emit('input shape {}'.format(self.imageMitoOrig.shape))
         # Do NN for all images
-        frameNum = self.imageMitoOrig.shape[0]
-        postSize = round(self.imageMitoOrig.shape[1]*resizeParam)
-        self.nnOutput = np.zeros((frameNum, postSize, postSize))
+        self.frameNum = self.imageMitoOrig.shape[0]
+        self.postSize = round(self.imageMitoOrig.shape[1]*resizeParam)
+        self.nnOutput = np.zeros((self.frameNum, self.postSize, self.postSize))
         self.mitoDataFull = np.zeros_like(self.nnOutput)
         self.drpDataFull = np.zeros_like(self.nnOutput)
         outputData = []
-        self.maxPos = []
-        self.nnRecalculated = np.zeros(frameNum)
-        # set up the progress bar
-        self.progress.setRange(0, frameNum-1)
+        self.nnRecalculated = np.zeros(self.frameNum)
 
-        self.loadingStatusLabel.setText('Processing frames and running the network')
+        self.setLabel.emit('Processing frames and running the network')
         for frame in range(0, self.imageMitoOrig.shape[0]):
             inputData, positions = prepareNNImages(
                 self.imageMitoOrig[frame, :, :],
                 self.imageDrpOrig[frame, :, :], nnImageSize)
 
             # Do the NN calculation if there is not already a file there
-            if self.model == 'folder' and np.max(self.nnOutput[frame]) > 0:
+            if self.mode == 'folder' and np.max(self.nnOutput[frame]) > 0:
                 nnDataPres = 1
             else:
                 nnDataPres = 0
-                outputPredict = self.model.predict_on_batch(inputData)
+                outputPredict = data.model.predict_on_batch(inputData)
                 self.nnRecalculated[frame] = 1
 
             i = 0
@@ -220,21 +369,22 @@ class NNGui(QWidget):
 
             outputData.append(np.max(self.nnOutput[frame, :, :]))
             self.maxPos.append(list(zip(*np.where(self.nnOutput[frame] == outputData[-1]))))
-            self.progress.setValue(frame)
-            self.app.processEvents()
+            self.change_progress.emit(frame)
+            QApplication.processEvents()
 
-        self.loadingStatusLabel.setText('Resize the original frames to fit the output')
-        print(postSize)
-        imageDrpOrigScaled = np.zeros((self.imageDrpOrig.shape[0], postSize, postSize))
-        imageMitoOrigScaled = np.zeros((self.imageDrpOrig.shape[0], postSize, postSize))
+        self.setLabel.emit('Resize the original frames to fit the output')
+        self.setLog.emit('Size after network: {}x{}'.format(self.postSize, self.postSize))
+        imageDrpOrigScaled = np.zeros((self.imageDrpOrig.shape[0], self.postSize, self.postSize))
+        imageMitoOrigScaled = np.zeros((self.imageDrpOrig.shape[0], self.postSize, self.postSize))
         for i in range(0, self.imageMitoOrig.shape[0]):
-            imageDrpOrigScaled[i] = transform.rescale(self.imageDrpOrig[i], resizeParam)
-            imageMitoOrigScaled[i] = transform.rescale(self.imageMitoOrig[i], resizeParam)
-            self.progress.setValue(i)
-            self.app.processEvents()
-        self.imageDrpOrig = np.array(imageDrpOrigScaled)
-        self.imageMitoOrig = np.array(imageMitoOrigScaled)
-        print(self.imageMitoOrig.shape)
+            imageDrpOrigScaled[i] = transform.rescale(self.imageDrpOrig[i], resizeParam,
+                                                      anti_aliasing=True, preserve_range=True)
+            imageMitoOrigScaled[i] = transform.rescale(self.imageMitoOrig[i], resizeParam,
+                                                       anti_aliasing=True, preserve_range=True)
+            self.change_progress.emit(i)
+            QApplication.processEvents()
+        self.imageDrpOrig = np.array(imageDrpOrigScaled).astype(np.uint8)
+        self.imageMitoOrig = np.array(imageMitoOrigScaled).astype(np.uint8)
 
         # Make a rolling mean of the output Data
         # N = 10
@@ -242,99 +392,28 @@ class NNGui(QWidget):
         # outputDataSmooth[0:N] = np.ones(N)*np.mean(outputData[0:N])
         # for x in range(N, len(outputData)):
         #     outputDataSmooth[x] = np.sum(outputData[x-N:x])/N
-        self.app.processEvents()
-        self.outputPlot.deleteRects()
-        self.outputPlot.frames.setData([])
-        self.outputPlot.nnframeScatter.setData([])
+        QApplication.processEvents()
+        data.outputPlot.deleteRects()
+        data.outputPlot.frames.setData([])
+        data.outputPlot.nnframeScatter.setData([])
         if self.mode == 'stack':
-            self.outputPlot.nnline.setData(outputData)
-            self.outputPlot.scatter.setData(range(0, len(outputData)), outputData)
+            data.outputPlot.nnline.setData(outputData)
+            data.outputPlot.scatter.setData(range(0, len(outputData)), outputData)
         else:
-            self.loadingStatusLabel.setText('Getting the timing data')
-            self.outputPlot.loadData(os.path.dirname(fname[0]), self.progress, self.app)
-            self.app.processEvents()
+            self.setLabel.emit('Getting the timing data')
+            data.outputPlot.loadData(os.path.dirname(fname[0]), data.progress, data.app)
+            QApplication.processEvents()
             for i in range(-1, 6):
-                self.outputPlot.inc = i
-                self.outputPlot.updatePlot()
+                data.outputPlot.inc = i
+                data.outputPlot.updatePlot()
 
-        self.frameSlider.setMaximum(self.nnOutput.shape[0]-1)
-
-        self.refreshGradients()
-        self.onTimer()
-        self.loadingStatusLabel.setText('Done')
-        self.viewerProc.viewBox.setRange(xRange=(0, postSize), yRange=(0, postSize))
-
-    def loadModel(self):
-        """ Load a .h5 model generated using Keras """
-        self.loadingStatusLabel.setText('Loading Model')
-        fname = QFileDialog.getOpenFileName(
-            self, 'Open file', 'C:/Users/stepp/Documents/data_raw/SmartMito/',
-            "Keras models (*.h5)")
-        print(fname[0])
-        self.model = keras.models.load_model(fname[0], compile=True)
-        self.loadingStatusLabel.setText('Done')
-
-    def orderChange(self):
-        """ React to a press of the order button to read interleaved data into the right order """
-        if self.order == 0:
-            self.order = 1
-            orderStr = 'order: Drp first'
-        else:
-            self.order = 0
-            orderStr = 'order: Mito first'
-        print(self.order)
-        self.orderButton.setText(orderStr)
-
-    def onTimer(self):
-        """ Reset the data in the GUI on the timer when button or slider is pressed """
-        i = self.frameSlider.value()
-        self.imageItemMitoOrig.setImage(self.imageMitoOrig[i])
-        self.imageItemDrpOrig.setImage(self.imageDrpOrig[i])
-        self.imageItemMitoProc.setImage(self.mitoDataFull[i])
-        self.imageItemDrpProc.setImage(self.drpDataFull[i])
-        self.imageItemNN.setImage(self.nnOutput[i])
-        self.currentFrameLabel.setText(str(i))
-        if self.mode == 'stack':
-            self.frameLine.setValue(i)
-        else:
-            self.frameLine.setValue(self.outputPlot.elapsed[i])
-        self.viewerOrig.cross.setPosition([self.maxPos[i][0]])
-        self.viewerProc.cross.setPosition([self.maxPos[i][0]])
-        self.viewerNN.cross.setPosition([self.maxPos[i][0]])
-
-    def refreshGradients(self):
-        """ refresh the images when a LUT was changed in the popup window """
-        self.viewerOrig.setImage(self.imageMitoOrig[0], 1)
-        self.viewerOrig.setImage(self.imageDrpOrig[0], 0)
-        self.viewerProc.setImage(self.mitoDataFull[0], 1)
-        self.viewerProc.setImage(self.drpDataFull[0], 0)
-        self.viewerNN.setImage(self.nnOutput[0], 0)
-
-    def startTimer(self):
-        """ start Timer when slider is pressed """
-        self.timer.start()
-
-    def stopTimer(self):
-        """ stop timer when slider is released"""
-        self.timer.stop()
-
-    def nextFrame(self):
-        """ display next frame in all viewBoxes when '>' button is pressed """
-        i = self.frameSlider.value()
-        self.frameSlider.setValue(i + 1)
-        self.onTimer()
-
-    def prevFrame(self):
-        """ display previous frame in all viewBoxes when '<' button is pressed """
-        i = self.frameSlider.value()
-        self.frameSlider.setValue(i - 1)
-        self.onTimer()
+        return self
 
 
 def main():
     """ main method to run and display the NNGui """
     app = QApplication(sys.argv)
-    # app.setAttribute(QtCore.Qt.AA_Use96Dpi)
+    # setAttribute(QtCore.Qt.AA_Use96Dpi)
     stackViewer = NNGui(app)
 
     stackViewer.showMaximized()

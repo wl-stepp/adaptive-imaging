@@ -118,12 +118,19 @@ class QtImageViewerMerge(QMainWindow):  # GraphicsWindow):
 
     def setImage(self, img, pos=0):
         """ set a new image img to the channel defined in pos and update the saturation Sliders """
+        oldLevels = self.imageItems[pos]['ImageItem'].getLevels()
         self.imageItems[pos]['ImageItem'].setImage(img)
-        fullRange = self.imageItems[pos]['ImageItem'].quickMinMax()
-        minRange = fullRange[0]
-        maxRange = fullRange[1]
-        self.saturationSliders[pos].viewBox.setYRange(minRange, maxRange)
-        self.saturationSliders[pos].regions[0].setRegion((minRange, maxRange))
+        self.imageItems[pos]['ImageItem'].setLevels(oldLevels)
+
+    def resetRanges(self):
+        """ reset Ranges when a new stack is loaded in by some GUI """
+        for pos in range(self.numChannels):
+            print(pos)
+            fullRange = self.imageItems[pos]['ImageItem'].quickMinMax()
+            maxRange = fullRange[1]
+            self.saturationSliders[pos].viewBox.setYRange(0, maxRange+10)
+            self.saturationSliders[pos].regions[0].setRegion((0, maxRange))
+            self.imageItems[pos]['ImageItem'].setLevels((0, maxRange))
 
     def addImage(self, img=None):
         """ Add an image item/channel on top of the other images that are already present. Do not

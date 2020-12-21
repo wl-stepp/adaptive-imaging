@@ -142,7 +142,6 @@ class SatsGUI(QWidget):
         self.elapsed = np.array(self.elapsed[0::2])/1000
         self.delay = loadiSIMmetadata(folder)
         self.nnData = loadNNData(folder)
-        print(self.elapsed)
         print(self.delay)
 
     def updatePlot(self):
