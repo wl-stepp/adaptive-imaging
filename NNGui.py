@@ -84,12 +84,14 @@ class NNGui(QWidget):
         self.frameSlider = QSlider(Qt.Horizontal)
         self.frameSlider.setMinimumHeight(20)
         self.frameSlider.setValue(0)
+        self.frameSlider.setDisabled(True)
         self.prevFrameButton = QPushButton("<")
         self.nextFrameButton = QPushButton(">")
 
         # loadBox content: Buttons for load model and data
         self.modelButton = QPushButton("load model")
         self.dataButton = QPushButton("load data")
+        self.dataButton.setDisabled(True)
         self.orderButton = QPushButton("order: Drp first")
         self.currentFrameLabel = QLabel('Frame')
         self.loadingStatusLabel = QLabel('')
@@ -190,7 +192,7 @@ class NNGui(QWidget):
         self.viewerProc.viewBox.setRange(xRange=(0, data.postSize), yRange=(0, data.postSize))
 
         # set up the progress bar
-        self.progress.setRange(0, data.frameNum-1)
+        self.frameSlider.setDisabled(False)
 
     def updateProgress(self, rangeMax):
         """ Set the range of the progress bar """
@@ -220,6 +222,7 @@ class NNGui(QWidget):
         self.model = keras.models.load_model(fname[0], compile=True)
         self.loadingStatusLabel.setText('Done')
         self.log.appendPlainText(fname[0])
+        self.dataButton.setDisabled(False)
 
     def orderChange(self):
         """ React to a press of the order button to read interleaved data into the right order """
@@ -345,7 +348,6 @@ class LoadingThread(QObject):
         progress bar.
         """
 
-        # load images
         self.change_progress.emit(0)
 
         self.setLog.emit('input shape {}'.format(self.imageMitoOrig.shape))
