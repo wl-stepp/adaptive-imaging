@@ -396,7 +396,7 @@ class LUTItemSimple(QWidget):
 def main():
     """ Method to test the Viewer in a QBoxLayout with 1 and 2 channels"""
 
-    fname = ('C:/Users/stepp/Documents/data_raw/SmartMito/__short.tif')
+    fname = ('C:/Users/stepp/Documents/02_Raw/SmartMito/__short.tif')
     imageMitoOrig = io.imread(fname)
     imageDrpOrig = imageMitoOrig[1]
     imageMitoOrig = imageMitoOrig[0]

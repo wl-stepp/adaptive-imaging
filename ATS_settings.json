@@ -2,10 +2,10 @@
 
     "lebpc34": {
         "imageFolder": "//lebnas1.epfl.ch/microsc125/Watchdog/",
-        "_imageFolder": "C:/Users/stepp/Documents/data_raw/SmartMito/",
-        "frameNumBinary": "C:/Users/stepp/Documents/data_raw/SmartMito/frameNum.dat",
-        "modelPath": "C:/Users/stepp/Documents/data_raw/SmartMito/model_Dora.h5",
-        "matlabPath": "C:/Users/stepp/Documents/data_raw/SmartMito/matlab_bin.dat"
+        "_imageFolder": "C:/Users/stepp/Documents/02_Raw/SmartMito/",
+        "frameNumBinary": "C:/Users/stepp/Documents/02_Raw/SmartMito/frameNum.dat",
+        "modelPath": "C:/Users/stepp/Documents/02_Raw/SmartMito/model_Dora.h5",
+        "matlabPath": "C:/Users/stepp/Documents/02_Raw/SmartMito/matlab_bin.dat"
     },
     "lebpc20": {
         "imageFolder": "//lebnas1.epfl.ch/microsc125/Watchdog/",

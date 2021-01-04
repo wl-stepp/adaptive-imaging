@@ -21,7 +21,7 @@ from skimage import io
 def main():
     """Method to simulate microManager saving for testing network_watchdog"""
 
-    dataPath = 'C:/Users/stepp/Documents/data_raw/SmartMito/'  # nb: begin with /
+    dataPath = 'C:/Users/stepp/Documents/02_Raw/SmartMito/'  # nb: begin with /
     print('dataPath : ', dataPath)
     print()
     inputDataFilename1 = dataPath + 'Mito.h5'  # Mito

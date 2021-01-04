@@ -155,7 +155,7 @@ class NNGui(QWidget):
         self.drpDataFull = None
         self.maxPos = None
         self.nnRecalculated = None
-        self.folder = 'C:/Users/stepp/Documents/data_raw/SmartMito/'
+        self.folder = 'C:/Users/stepp/Documents/02_Raw/SmartMito/'
 
         self.app = app
         self.order = 1
@@ -217,7 +217,7 @@ class NNGui(QWidget):
         """ Load a .h5 model generated using Keras """
         self.loadingStatusLabel.setText('Loading Model')
         fname = QFileDialog.getOpenFileName(
-            self, 'Open file', 'C:/Users/stepp/Documents/data_raw/SmartMito/',
+            self, 'Open file', 'C:/Users/stepp/Documents/02_Raw/SmartMito/',
             "Keras models (*.h5)")
         self.model = keras.models.load_model(fname[0], compile=True)
         self.loadingStatusLabel.setText('Done')
