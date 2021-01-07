@@ -351,7 +351,7 @@ class LoadingThread(QObject):
         self.change_progress.emit(0)
 
         self.setLog.emit('input shape {}'.format(self.imageMitoOrig.shape))
-        # Do NN for all images
+        # Initialize values and data for neural network
         self.frameNum = self.imageMitoOrig.shape[0]
         self.postSize = round(self.imageMitoOrig.shape[1]*self.resizeParam)
         self.nnOutput = np.zeros((self.frameNum, self.postSize, self.postSize))
@@ -360,8 +360,10 @@ class LoadingThread(QObject):
         outputData = []
         self.nnRecalculated = np.zeros(self.frameNum)
 
+        # Process data for all frames that where found
         self.setLabel.emit('Processing frames and running the network')
         for frame in range(0, self.imageMitoOrig.shape[0]):
+            # Make preprocessed tiles that can be fed to the neural network
             inputData, positions = prepareNNImages(
                 self.imageMitoOrig[frame, :, :],
                 self.imageDrpOrig[frame, :, :], self.nnImageSize)
@@ -374,6 +376,7 @@ class LoadingThread(QObject):
                 outputPredict = data.model.predict_on_batch(inputData)
                 self.nnRecalculated[frame] = 1
 
+            # Stitch the tiles made back together
             i = 0
             st0 = positions['stitch']
             st1 = None if st0 == 0 else -st0
@@ -387,6 +390,7 @@ class LoadingThread(QObject):
                     inputData[i, st0:st1, st0:st1, 1]
                 i += 1
 
+            # Get the output data from the nn channel and its position
             outputData.append(np.max(self.nnOutput[frame, :, :]))
             self.maxPos.append(list(zip(*np.where(self.nnOutput[frame] == outputData[-1]))))
             self.change_progress.emit(frame)
@@ -412,6 +416,8 @@ class LoadingThread(QObject):
         # outputDataSmooth[0:N] = np.ones(N)*np.mean(outputData[0:N])
         # for x in range(N, len(outputData)):
         #     outputDataSmooth[x] = np.sum(outputData[x-N:x])/N
+
+        # Make the SATS_GUI plot for nn_output vs time
         QApplication.processEvents()
         data.outputPlot.deleteRects()
         data.outputPlot.frames.setData([])

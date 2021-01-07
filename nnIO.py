@@ -8,9 +8,10 @@ import json
 import os
 import re
 
+import imageio
 import numpy as np
 import tifffile
-from matplotlib import pyplot as plt
+import xmltodict
 from skimage import io
 
 
@@ -42,24 +43,34 @@ def loadTIF(folder):
 
 
 def loadElapsedTime(folder, progress=None, app=None):
-    """ get the Elapsed time for all files in folder """
+    """ get the Elapsed time for all .tif files in folder or from a stack """
+
     elapsed = []
-    fileList = glob.glob(folder + '/img_*.tif')
-    numFrames = int(len(fileList)/2)
-    if progress is not None:
-        progress.setRange(0, numFrames*2)
-    i = 0
-    for filePath in glob.glob(folder + '/img_*.tif'):
-        with tifffile.TiffFile(filePath) as tif:
-            mdInfo = tif.imagej_metadata['Info']  # pylint: disable=E1136  # pylint/issues/3139
-            mdInfoDict = json.loads(mdInfo)
-            elapsed.append(mdInfoDict['ElapsedTime-ms'])
-    if app is not None:
-        app.processEvents()
-    # Progress the bar if available
-    if progress is not None:
-        progress.setValue(i)
-    i = i + 1
+    # Check for folder or stack mode
+    if not re.match(r'*.tif*', folder) is None:
+        # get microManager elapsed times if available
+        with tifffile.TiffFile(folder) as tif:
+            for frame in range(0, len(tif.pages)):
+                elapsed.append(
+                    tif.pages[frame].tags['MicroManagerMetadata'].value['ElapsedTime-ms'])
+    else:
+        fileList = glob.glob(folder + '/img_*.tif')
+        numFrames = int(len(fileList)/2)
+        if progress is not None:
+            progress.setRange(0, numFrames*2)
+        i = 0
+        for filePath in glob.glob(folder + '/img_*.tif'):
+            with tifffile.TiffFile(filePath) as tif:
+                mdInfo = tif.imagej_metadata['Info']  # pylint: disable=E1136  # pylint/issues/3139
+                mdInfoDict = json.loads(mdInfo)
+                elapsed.append(mdInfoDict['ElapsedTime-ms'])
+            if app is not None:
+                app.processEvents()
+            # Progress the bar if available
+            if progress is not None:
+                progress.setValue(i)
+            i = i + 1
+
     return elapsed
 
 
@@ -145,19 +156,56 @@ def loadTifStack(stack, order=0):
     start1 = order
     start2 = np.abs(order-1)
     imageMitoOrig = io.imread(stack)
+
+    elapsed = []
+    # get elapsed from tif file
+    print(imageMitoOrig.shape)
+    with tifffile.TiffFile(stack, fastij=False) as tif:
+        mdInfo = tif.ome_metadata  # pylint: disable=E1136  # pylint/issues/3139
+        mdInfoDict = xmltodict.parse(mdInfo)
+        for frame in range(0, imageMitoOrig.shape[0]):
+            print(frame)
+            elapsed.append(float(
+                mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaT']))
+            print(elapsed[-1])
+
+    # Deinterleave data
     stack1 = imageMitoOrig[start1::2]
+    elapsed1 = elapsed[start1::2]
     stack2 = imageMitoOrig[start2::2]
-    return stack1, stack2
+    elapsed2 = elapsed[start2::2]
+    return stack1, stack2, elapsed1, elapsed2
+
+
+def savegif(stack, times, fps):
+    """ Save a gif that uses the right frame duration read from the files. This can be sped up
+    using the fps option"""
+    filePath = 'C:/Users/stepp/Documents/02_Raw/SmartMito/test.gif'
+    times = np.divide(times, fps).tolist()
+    print(stack.shape)
+    imageio.mimsave(filePath, stack, duration=times)
 
 
 def main():
-    """ Main method testing loadTifFolder """
+    """ Main method testing savegif """
+
+    from skimage import exposure
     folder = (
-        'W:/Watchdog/microM_test/201208_cell_Int0s_30pc_488_50pc_561_band_9_nodecon')
+        "C:/Users/stepp/Documents/02_Raw/SmartMito/microM_test/"
+        "201208_cell_Int0s_30pc_488_50pc_561_band_5")
+
     stack1 = loadTifFolder(folder, 512/741, 0)[0]
-    print(stack1.shape)
-    plt.imshow(stack1[5])
-    plt.show()
+    times = loadElapsedTime(folder)
+    times = times[0::2]
+    times = (times - np.min(times))/1000
+    times = np.diff(times).tolist()
+
+    print(len(times))
+    stack1 = exposure.rescale_intensity(
+            stack1, (np.min(stack1), np.max(stack1)), out_range=(0, 255))
+    stack1 = stack1.astype('uint8')
+    savegif(stack1, times, 10)
+
     print('Done')
 
 
