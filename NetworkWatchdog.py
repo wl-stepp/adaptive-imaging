@@ -21,7 +21,7 @@ import os
 import re  # Regular expression module
 import sys
 from datetime import datetime
-
+import time
 import numpy as np
 import pyqtgraph as pg
 # Qt display imports
@@ -57,7 +57,9 @@ class NetworkWatchdog(QWidget):
     reinitGUI = pyqtSignal(int)
 
     def __init__(self):
-
+        # Set if channels are used in Micromanager
+        self.channels = True
+        
         # Read settings from the json file depending on which computer we are on
         with open('./ATS_settings.json') as file:
             self.settings = json.load(file)[os.environ['COMPUTERNAME'].lower()]
@@ -133,6 +135,7 @@ class NetworkWatchdog(QWidget):
         self.myObserver.start()
 
         print('All loaded, running...')
+        print('Channel Mode:', self.channels)
 
         # Init variables
         self.mitoDataFull = None
@@ -140,7 +143,7 @@ class NetworkWatchdog(QWidget):
         self.outputHistogram = None
         self.outputX = None
         self.maxPos = None
-
+        
         self.frameNumOld = 100
         self.inputSizeOld = 0
         self.folderNameOld = 'noFolder'
@@ -171,24 +174,41 @@ class NetworkWatchdog(QWidget):
         splitStr = re.split(r'_z\d+', splitStr[1])
         frameNum = int(splitStr[0])
 
+        # Extract channel number if mode is channels
+        if self.channels:
+            splitStr = re.split(r'img_channel',
+                                os.path.basename(event.src_path))
+            splitStr = re.split(r'_position\d+_time\d+_z\d+', splitStr[1])
+            channelNum = int(splitStr[0])
+
         # Only go on if frame number is odd and this frame was not analysed yet
-        if not frameNum % 2 or frameNum == self.frameNumOld:
-            return
+        if self.channels:
+            if channelNum == 0 or frameNum == self.frameNumOld:
+                return
+        else:
+            if not frameNum % 2 or frameNum == self.frameNumOld:
+                return
 
         # check framNumwrite.py output from the binary
-        file = open(os.path.join(self.settings['frameNumBinary']), mode='rb')
-        content = file.read()
-        file.close()
+        if not self.channels:
+            file = open(os.path.join(self.settings['frameNumBinary']), mode='rb')
+            content = file.read()
+            file.close()
 
-        # Skip file if a newer one is already in the folder
-        if not frameNum >= len(content)-1:
-            print(int((frameNum-1)/2), ' passed because newer file is there')
-            return
+            # Skip file if a newer one is already in the folder
+            if not frameNum >= len(content)-1:
+                print(int((frameNum-1)/2), ' passed because newer file is there')
+                return
 
         # Construct paths
         # DO THIS IN A NICER WAY! not required to have that exact format
-        mitoFile = 'img_channel000_position000_time' \
-            + str((frameNum-1)).zfill(9) + '_z000.tif'
+        if self.channels:
+            time.sleep(0.1)
+            mitoFile = 'img_channel000_position000_time' \
+            + str((frameNum)).zfill(9) + '_z000.tif'
+        else:
+            mitoFile = 'img_channel000_position000_time' \
+                + str((frameNum-1)).zfill(9) + '_z000.tif'
         nnFile = 'img_channel000_position000_time' \
             + str((frameNum)).zfill(9) + '_nn.tiff'
         mitoPath = os.path.join(os.path.dirname(event.src_path), mitoFile)
@@ -201,11 +221,15 @@ class NetworkWatchdog(QWidget):
         if not size > mitoSize*0.95:
             return
 
-        print('frame', int((frameNum-1)/2))
+        if self.channels:
+            print('frame', frameNum)
+        else:
+             print('frame', int((frameNum-1)/2))   
         # Read the mito image first, as it should already be written
         # mitoFull = io.imread(mitoPath)
         # drpFull = io.imread(event.src_path)
         # switched for Drp > green mito > red
+        print(event.src_path)
         mitoFull = io.imread(event.src_path)
         drpFull = io.imread(mitoPath)
         print(mitoFull.shape)
@@ -350,7 +374,6 @@ class NetworkWatchdog(QWidget):
 
     def closeEvent(self, event):
         """ Terminate the watchdogs and clean up when the windows of the GUI is closed """
-        print(event)
         self.myObserver.stop()
         self.myObserver.join()
         print('Watchdogs stopped')
