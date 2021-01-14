@@ -47,29 +47,29 @@ def loadElapsedTime(folder, progress=None, app=None):
 
     elapsed = []
     # Check for folder or stack mode
-    if not re.match(r'*.tif*', folder) is None:
-        # get microManager elapsed times if available
-        with tifffile.TiffFile(folder) as tif:
-            for frame in range(0, len(tif.pages)):
-                elapsed.append(
-                    tif.pages[frame].tags['MicroManagerMetadata'].value['ElapsedTime-ms'])
-    else:
-        fileList = glob.glob(folder + '/img_*.tif')
-        numFrames = int(len(fileList)/2)
+    # if not re.match(r'*.tif*', folder) is None:
+    #     # get microManager elapsed times if available
+    #     with tifffile.TiffFile(folder) as tif:
+    #         for frame in range(0, len(tif.pages)):
+    #             elapsed.append(
+    #                 tif.pages[frame].tags['MicroManagerMetadata'].value['ElapsedTime-ms'])
+    # else:
+    fileList = glob.glob(folder + '/img_*.tif')
+    numFrames = int(len(fileList)/2)
+    if progress is not None:
+        progress.setRange(0, numFrames*2)
+    i = 0
+    for filePath in glob.glob(folder + '/img_*.tif'):
+        with tifffile.TiffFile(filePath) as tif:
+            mdInfo = tif.imagej_metadata['Info']  # pylint: disable=E1136  # pylint/issues/3139
+            mdInfoDict = json.loads(mdInfo)
+            elapsed.append(mdInfoDict['ElapsedTime-ms'])
+        if app is not None:
+            app.processEvents()
+        # Progress the bar if available
         if progress is not None:
-            progress.setRange(0, numFrames*2)
-        i = 0
-        for filePath in glob.glob(folder + '/img_*.tif'):
-            with tifffile.TiffFile(filePath) as tif:
-                mdInfo = tif.imagej_metadata['Info']  # pylint: disable=E1136  # pylint/issues/3139
-                mdInfoDict = json.loads(mdInfo)
-                elapsed.append(mdInfoDict['ElapsedTime-ms'])
-            if app is not None:
-                app.processEvents()
-            # Progress the bar if available
-            if progress is not None:
-                progress.setValue(i)
-            i = i + 1
+            progress.setValue(i)
+        i = i + 1
 
     return elapsed
 
@@ -151,7 +151,7 @@ def loadTifFolder(folder, resizeParam=1, order=0, progress=None) -> np.ndarray:
     return stack1, stack2, stackNN
 
 
-def loadTifStack(stack, order=0):
+def loadTifStack(stack, order=0, elapsed=False):
     """ Load a tif stack and deinterleave depending on the order (0 or 1) """
     start1 = order
     start2 = np.abs(order-1)
@@ -162,11 +162,11 @@ def loadTifStack(stack, order=0):
     print(imageMitoOrig.shape)
     with tifffile.TiffFile(stack, fastij=False) as tif:
         mdInfo = tif.ome_metadata  # pylint: disable=E1136  # pylint/issues/3139
-        mdInfoDict = xmltodict.parse(mdInfo)
-        for frame in range(0, imageMitoOrig.shape[0]):
-            print(frame)
-            elapsed.append(float(
-                mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaT']))
+        if mdInfo is not None:
+            mdInfoDict = xmltodict.parse(mdInfo)
+            for frame in range(0, imageMitoOrig.shape[0]):
+                elapsed.append(float(
+                    mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaT']))
             print(elapsed[-1])
 
     # Deinterleave data
@@ -174,7 +174,7 @@ def loadTifStack(stack, order=0):
     elapsed1 = elapsed[start1::2]
     stack2 = imageMitoOrig[start2::2]
     elapsed2 = elapsed[start2::2]
-    return stack1, stack2, elapsed1, elapsed2
+    return (stack1, stack2, elapsed1, elapsed2) if elapsed else (stack1, stack2)
 
 
 def savegif(stack, times, fps):
