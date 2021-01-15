@@ -93,6 +93,10 @@ class NNGui(QWidget):
         self.dataButton = QPushButton("load data")
         self.dataButton.setDisabled(True)
         self.orderButton = QPushButton("order: Drp first")
+        self.hideOrig = QPushButton('Orig')
+        self.hideOrig.setCheckable(True)
+        self.hideNN = QPushButton('NN')
+        self.hideNN.setCheckable(True)
         self.currentFrameLabel = QLabel('Frame')
         self.loadingStatusLabel = QLabel('')
         # progress bar for loading data
@@ -109,6 +113,8 @@ class NNGui(QWidget):
         self.modelButton.clicked.connect(self.loadModel)
         self.dataButton.clicked.connect(self.loadDataThread)
         self.orderButton.clicked.connect(self.orderChange)
+        self.hideOrig.clicked.connect(self.hideViewerOrig)
+        self.hideNN.clicked.connect(self.hideViewerNN)
         self.prevFrameButton.clicked.connect(self.prevFrame)
         self.nextFrameButton.clicked.connect(self.nextFrame)
 
@@ -131,10 +137,12 @@ class NNGui(QWidget):
         gridBox.addWidget(self.modelButton, 0, 0)
         gridBox.addWidget(self.dataButton, 0, 1)
         gridBox.addWidget(self.orderButton, 0, 2)
-        gridBox.addWidget(self.loadingStatusLabel, 1, 0, 1, 3)
-        gridBox.addWidget(self.progress, 2, 0, 1, 3)
-        gridBox.addWidget(self.currentFrameLabel, 3, 0)
-        gridBox.addWidget(self.log, 4, 0, 1, 3)
+        gridBox.addWidget(self.hideOrig, 1, 0)
+        gridBox.addWidget(self.hideNN, 1, 2)
+        gridBox.addWidget(self.loadingStatusLabel, 2, 0, 1, 3)
+        gridBox.addWidget(self.progress, 3, 0, 1, 3)
+        gridBox.addWidget(self.currentFrameLabel, 4, 0)
+        gridBox.addWidget(self.log, 5, 0, 1, 3)
 
         self.threads = []
 
@@ -175,6 +183,7 @@ class NNGui(QWidget):
 
     def receiveData(self, data):
         """ Receive the data from the loading worker """
+        print('copy the loaded data to GUI')
         self.mode = data.mode
         self.imageMitoOrig = data.imageMitoOrig
         self.imageDrpOrig = data.imageDrpOrig
@@ -184,7 +193,7 @@ class NNGui(QWidget):
         self.maxPos = data.maxPos
         self.frameSlider.setMaximum(self.nnOutput.shape[0]-1)
         self.refreshGradients()
-        self.onTimer()
+        # self.onTimer()
         self.viewerOrig.resetRanges()
         self.viewerProc.resetRanges()
         self.viewerNN.resetRanges()
@@ -223,6 +232,22 @@ class NNGui(QWidget):
         self.loadingStatusLabel.setText('Done')
         self.log.appendPlainText(fname[0])
         self.dataButton.setDisabled(False)
+
+    def hideViewerOrig(self):
+        """ Hide the Orig view to get better performance for big datasets """
+
+        if self.viewerOrig.isHidden():
+            self.viewerOrig.show()
+        else:
+            self.viewerOrig.hide()
+
+    def hideViewerNN(self):
+        """ Hide the NN view to get better performance for big datasets """
+
+        if self.viewerNN.isHidden():
+            self.viewerNN.show()
+        else:
+            self.viewerNN.hide()
 
     def orderChange(self):
         """ React to a press of the order button to read interleaved data into the right order """
@@ -336,7 +361,7 @@ class LoadingThread(QObject):
             # If not singular files in folder, load as interleaved stack
             self.mode = 'stack'
             self.setLog.emit("Stack mode")
-            self.imageDrpOrig, self.imageMitoOrig = loadTifStack(fname[0], data.order)
+            self.imageDrpOrig, self.imageMitoOrig = loadTifStack(fname[0], order=data.order)
             # Save this to go back to when the user wants to load another file
             data.folder = os.path.dirname(fname[0])
             self.folder = data.folder
@@ -394,7 +419,7 @@ class LoadingThread(QObject):
             outputData.append(np.max(self.nnOutput[frame, :, :]))
             self.maxPos.append(list(zip(*np.where(self.nnOutput[frame] == outputData[-1]))))
             self.change_progress.emit(frame)
-            QApplication.processEvents()
+            # QApplication.processEvents()
 
         self.setLabel.emit('Resize the original frames to fit the output')
         self.setLog.emit('Size after network: {}x{}'.format(self.postSize, self.postSize))
@@ -406,7 +431,7 @@ class LoadingThread(QObject):
             imageMitoOrigScaled[i] = transform.rescale(self.imageMitoOrig[i], self.resizeParam,
                                                        anti_aliasing=True, preserve_range=True)
             self.change_progress.emit(i)
-            QApplication.processEvents()
+            # QApplication.processEvents()
         self.imageDrpOrig = np.array(imageDrpOrigScaled).astype(np.uint8)
         self.imageMitoOrig = np.array(imageMitoOrigScaled).astype(np.uint8)
 
@@ -418,7 +443,7 @@ class LoadingThread(QObject):
         #     outputDataSmooth[x] = np.sum(outputData[x-N:x])/N
 
         # Make the SATS_GUI plot for nn_output vs time
-        QApplication.processEvents()
+        # QApplication.processEvents()
         data.outputPlot.deleteRects()
         data.outputPlot.frames.setData([])
         data.outputPlot.nnframeScatter.setData([])

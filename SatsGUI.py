@@ -74,8 +74,8 @@ class SatsGUI(QWidget):
         QWidget.__init__(self)
 
         self.folder = (
-             'C:/Users/stepp/Documents/data_raw/SmartMito/' +
-             'microM_test/cell_Int5s_30pc_488_50pc_561_5')
+             'W:/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/'
+             'sample1/sample1_cell_3/sample1_cell_3_MMStack_Pos0_2.ome_ATS')
         # Windows for plotting
         self.plot = KeyPressWindow()
         self.plotItem1 = self.plot.plotItem
@@ -140,9 +140,9 @@ class SatsGUI(QWidget):
         self.elapsed = loadElapsedTime(folder, progress, app)
         self.elapsed.sort()
         self.elapsed = np.array(self.elapsed[0::2])/1000
+
         self.delay = loadiSIMmetadata(folder)
         self.nnData = loadNNData(folder)
-        print(self.delay)
 
     def updatePlot(self):
         """ update the plot when the 'A' key is pressed and advance plot. This is skipped
@@ -157,12 +157,18 @@ class SatsGUI(QWidget):
         elif self.inc == 2:
             self.delay = np.append(np.ones(5), self.delay)
             rectData = self.delay[5:len(self.elapsed)]
+            # rectData = np.append(rectData[0:-2], rectData[0])
             # see where the delay value changes
+            # print(rectDataroll)
             changes = np.where(np.roll(rectData, 1) != rectData)[0]
             # map this frame data to the elapsed time data
+
+            # print(np.round(np.diff(self.elapsed),2))
             changes = self.elapsed[changes+1]
+
             changes = np.insert(changes, 0, np.min(self.elapsed))
             changes = np.append(changes, np.max(self.elapsed))
+
             for i in range(1, len(changes)):
                 color = '#202020' if i % 2 else '#101010'
                 rectItem = RectItem(QtCore.QRectF(
@@ -227,7 +233,8 @@ def main():
     "Presentation mode of the GUI that can be advanced clicked the A button on the keyboard."
     app = QApplication(sys.argv)
     gui = SatsGUI()
-    gui.loadData('W:/Watchdog/microM_test/201208_cell_Int0s_30pc_488_50pc_561_band_5', None)
+    gui.loadData('W:/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/sample1/sample1_cell_3/sample1_cell_3_MMStack_Pos0_1.ome_ATS')
+    # gui.loadData('W:/Watchdog/microM_test/201208_cell_Int0s_30pc_488_50pc_561_band_5')
     gui.show()
 
     sys.exit(app.exec_())

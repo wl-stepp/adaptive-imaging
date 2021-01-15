@@ -26,7 +26,6 @@ def loadiSIMmetadata(folder):
             data[1] = 0.2
         numFrames = int(data[2])
         delay = np.append(delay, np.ones(numFrames)*data[1])
-    print(delay)
     return delay
 
 
@@ -137,8 +136,8 @@ def loadTifFolder(folder, resizeParam=1, order=0, progress=None) -> np.ndarray:
             stack2[frame] = io.imread(filePath)
 
         # Progress the bar if available
-        if progress is not None:
-            progress.setValue(frameNum)
+        # if progress is not None:
+            # progress.setValue(frameNum)
 
     if order == 0:
         stack1 = np.array(stack1)
@@ -151,11 +150,13 @@ def loadTifFolder(folder, resizeParam=1, order=0, progress=None) -> np.ndarray:
     return stack1, stack2, stackNN
 
 
-def loadTifStack(stack, order=0, elapsed=False):
+def loadTifStack(stack, order=0, outputElapsed=False):
     """ Load a tif stack and deinterleave depending on the order (0 or 1) """
     start1 = order
     start2 = np.abs(order-1)
     imageMitoOrig = io.imread(stack)
+    print('STACK IS CROPPED')
+    imageMitoOrig = imageMitoOrig[0:600, :, :]
 
     elapsed = []
     # get elapsed from tif file
@@ -174,7 +175,7 @@ def loadTifStack(stack, order=0, elapsed=False):
     elapsed1 = elapsed[start1::2]
     stack2 = imageMitoOrig[start2::2]
     elapsed2 = elapsed[start2::2]
-    return (stack1, stack2, elapsed1, elapsed2) if elapsed else (stack1, stack2)
+    return (stack1, stack2, elapsed1, elapsed2) if outputElapsed else (stack1, stack2)
 
 
 def savegif(stack, times, fps):
