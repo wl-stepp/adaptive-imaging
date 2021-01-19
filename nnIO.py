@@ -158,8 +158,6 @@ def loadTifStack(stack, order=0, outputElapsed=False):
     start1 = order
     start2 = np.abs(order-1)
     imageMitoOrig = io.imread(stack)
-    print('STACK IS CROPPED')
-    imageMitoOrig = imageMitoOrig[0:600, :, :]
 
     elapsed = []
     # get elapsed from tif file
