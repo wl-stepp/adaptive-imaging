@@ -20,7 +20,10 @@ def loadiSIMmetadata(folder):
     """
     delay = []
     for name in sorted(glob.glob(folder + '/iSIMmetadata*.txt')):
-        data = np.genfromtxt(name)
+        txtFile = open(name)
+        data = txtFile.readline().split('\t')
+        data = [float(i) for i in data]
+        txtFile.close()
         # set minimum cycle time
         if data[1] == 0:
             data[1] = 0.2

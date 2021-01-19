@@ -103,9 +103,10 @@ class QtImageViewerMerge(QMainWindow):  # GraphicsWindow):
         self.menuButton = QPushButton("...", self.widget)
         self.menuButton.setFixedSize(20, 20)
         self.gridMenu.addWidget(self.menuButton, 0, 0, Qt.AlignTop)
+        self.viewBox.sigRangeChanged.connect(self.rangeChanged)
 
         self.zValue = 0
-        self.images = []
+        self.fullImages = []
         self.imageItems = []
         self.saturationSliders = []
         self.opacitySliders = []
@@ -116,17 +117,51 @@ class QtImageViewerMerge(QMainWindow):  # GraphicsWindow):
         # layoutBox = QHBoxLayout(self.widget)
         # self.viewBox.sigRangeChanged.connect(self.resizedEvent)
 
+    def rangeChanged(self):
+        """ Crop the image so only the part that is visible is actually added to the ViewBox """
+        for pos in range(self.numChannels):
+            if self.fullImages[pos] is None:
+                return
+            visRect = self.viewBox.viewRect()
+            fullSize = len(self.fullImages[pos])
+            oldLevels = self.imageItems[pos]['ImageItem'].getLevels()
+            adjustedRect = visRect
+
+            # Keep always one more pixel than necessary of the image on all sides
+            adjustedRect = QRectF(round(adjustedRect.left())-1, round(adjustedRect.top())-1,
+                                  round(adjustedRect.width())+2, round(adjustedRect.height())+2)
+
+            # Adjust for edges of the image entering the ViewBox
+            if visRect.bottom() > fullSize:
+                adjustedRect.setBottom(fullSize)
+            if visRect.right() > fullSize:
+                adjustedRect.setRight(fullSize)
+            if visRect.top() < 0:
+                adjustedRect.setTop(0)
+            if visRect.left() < 0:
+                adjustedRect.setLeft(0)
+
+            img = self.cropImagetoBox(self.fullImages[pos], adjustedRect)
+            self.imageItems[pos]['ImageItem'].setImage(img, levels=oldLevels)
+            adjustedRect = QRectF(round(adjustedRect.left()), round(adjustedRect.top()),
+                                  round(adjustedRect.width()), round(adjustedRect.height()))
+
+            self.imageItems[pos]['ImageItem'].setRect(adjustedRect)
+
+    def cropImagetoBox(self, img, Rect):
+        """ Crops image to the QRectF provided """
+        img = img[round(Rect.top()):round(Rect.bottom())][:, round(Rect.left()):round(Rect.right())]
+        return img
+
     def setImage(self, img, pos=0):
         """ set a new image img to the channel defined in pos and update the saturation Sliders """
-        oldLevels = self.imageItems[pos]['ImageItem'].getLevels()
-        self.imageItems[pos]['ImageItem'].setImage(img)
-        self.imageItems[pos]['ImageItem'].setLevels(oldLevels)
+        self.fullImages[pos] = img
+        self.rangeChanged()
 
     def resetRanges(self):
         """ reset Ranges when a new stack is loaded in by some GUI """
         for pos in range(self.numChannels):
-            print(pos)
-            fullRange = self.imageItems[pos]['ImageItem'].quickMinMax()
+            fullRange = [np.min(self.fullImages[pos]), np.max(self.fullImages[pos])]
             maxRange = fullRange[1]
             self.saturationSliders[pos].viewBox.setYRange(0, maxRange+10)
             self.saturationSliders[pos].regions[0].setRegion((0, maxRange))
@@ -136,14 +171,14 @@ class QtImageViewerMerge(QMainWindow):  # GraphicsWindow):
         """ Add an image item/channel on top of the other images that are already present. Do not
         init the alpha channel if its the first imageItem. Leave empty if no image is given  """
         imgItem = pg.ImageItem()
-
+        imgItem.setAutoDownsample(True)
         self.viewBox.addItem(imgItem)
         imgItem.setZValue(self.zValue)
         self.zValue = self.zValue + 1
         imgStruct = {'ImageItem': imgItem, 'cm_name': None, 'transparency': False,
                      'opacity': (0.3, 0.85), 'saturation': 255}
         self.imageItems.append(imgStruct)
-
+        self.fullImages.append(img)
         imgItem.setOpts(axisOrder='row-major')
         if self.numChannels > 0:
             imgItem.setCompositionMode(QPainter.CompositionMode_Screen)
@@ -435,6 +470,7 @@ def main():
         viewer.setLUT(imgItemmito, 'grey')
         # viewer.setImage(drp, 0)
         # viewer.setImage(mito, 1)
+        viewer.setImage(drp, 0)
 
         viewer2.addImage(mito)
 

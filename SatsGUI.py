@@ -203,6 +203,11 @@ class SatsGUI(QWidget):
 
         self.plot.update()
 
+    def resetPlot(self):
+        self.deleteRects()
+        self.frames.setData([])
+        self.nnframeScatter.setData([])
+
     def updateViews(self):
         """ adjust the two views to keep in sync when one of them is moved """
         # view has resized; update auxiliary views to match
@@ -233,7 +238,9 @@ def main():
     "Presentation mode of the GUI that can be advanced clicked the A button on the keyboard."
     app = QApplication(sys.argv)
     gui = SatsGUI()
-    gui.loadData('W:/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/sample1/sample1_cell_3/sample1_cell_3_MMStack_Pos0_1.ome_ATS')
+    folder = ('W:/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/'
+              'sample1/sample1_cell_3/sample1_cell_3_MMStack_Pos0_1.ome_ATS')
+    gui.loadData(folder)
     # gui.loadData('W:/Watchdog/microM_test/201208_cell_Int0s_30pc_488_50pc_561_band_5')
     gui.show()
 

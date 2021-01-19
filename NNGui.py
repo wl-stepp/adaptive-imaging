@@ -183,23 +183,38 @@ class NNGui(QWidget):
 
     def receiveData(self, data):
         """ Receive the data from the loading worker """
+        self.frameSlider.setDisabled(True)
         print('copy the loaded data to GUI')
         self.mode = data.mode
         self.imageMitoOrig = data.imageMitoOrig
         self.imageDrpOrig = data.imageDrpOrig
         self.mitoDataFull = data.mitoDataFull
         self.drpDataFull = data.drpDataFull
+        self.folder = data.startFolder
         self.nnOutput = data.nnOutput
         self.maxPos = data.maxPos
         self.frameSlider.setMaximum(self.nnOutput.shape[0]-1)
         self.refreshGradients()
-        # self.onTimer()
         self.viewerOrig.resetRanges()
         self.viewerProc.resetRanges()
         self.viewerNN.resetRanges()
         self.loadingStatusLabel.setText('Done')
         self.viewerProc.viewBox.setRange(xRange=(0, data.postSize), yRange=(0, data.postSize))
 
+        # Make the SATS_GUI plot for nn_output vs time
+        self.outputPlot.resetPlot()
+        if self.mode == 'stack':
+            self.outputPlot.nnline.setData(data.outputData)
+            self.outputPlot.scatter.setData(range(0, len(data.outputData)), data.outputData)
+        else:
+            self.loadingStatusLabel.setText('Getting the timing data')
+            print(self.folder)
+            self.outputPlot.loadData(data.folder, self.progress, self.app)
+            for i in range(-1, 6):
+                self.outputPlot.inc = i
+                self.outputPlot.updatePlot()
+
+        self.onTimer()
         # set up the progress bar
         self.frameSlider.setDisabled(False)
 
@@ -209,7 +224,7 @@ class NNGui(QWidget):
 
     def loadDataThread(self):
         """ Create and start the thread to load data """
-        worker = LoadingThread(self)
+        worker = LoadingThread(self.folder, self.order, self.model)
         thread = QThread()
         thread.setObjectName('Data Loader')
         self.threads.append((thread, worker))
@@ -314,14 +329,16 @@ class LoadingThread(QObject):
     setLog = pyqtSignal(str)
     updateProgressRange = pyqtSignal(int)
 
-    def __init__(self, data):
+    def __init__(self, startFolder, dataOrder, kerasModel):
         super().__init__()
-        self.data = data
+        self.startFolder = startFolder
+        self.dataOrder = dataOrder
+        self.model = kerasModel
         self.mode = None
         self.imageDrpOrig = None
         self.imageMitoOrig = None
         self.nnOutput = None
-        self.nnOutput = None
+        self.outputData = None
         self.mitoDataFull = None
         self.drpDataFull = None
         self.nnRecalculated = None
@@ -337,23 +354,23 @@ class LoadingThread(QObject):
     def work(self):
         """ Function used to start the loading in the thread load """
         self.setLog.emit('\n\nLoading thread started')
-        self._getFolder(self.data)
-        newData = self._loadData(self.data)
+        self._getFolder()
+        newData = self._loadData()
         self.loadingDone.emit(newData)
 
-    def _getFolder(self, data):
+    def _getFolder(self):
         """Getting GUI folder input, determine data type and load accordingly
         order 0 is mito first"""
-        fname = QFileDialog.getOpenFileName(QWidget(), 'Open file', data.folder)
+        fname = QFileDialog.getOpenFileName(QWidget(), 'Open file', self.startFolder)
         self.setLabel.emit('Loading images from files into arrays')
         if not re.match(r'img_channel\d+_position\d+_time', os.path.basename(fname[0])) is None:
             # Check for microManager file like name and if so load as files in folder
             self.setLog.emit("Folder mode")
             self.mode = 'folder'
             self.imageDrpOrig, self.imageMitoOrig, self.nnOutput = loadTifFolder(
-                os.path.dirname(fname[0]), self.resizeParam, data.order, data.progress)
+                os.path.dirname(fname[0]), self.resizeParam, self.dataOrder)
             # Save this to go back to when the user wants to load another file
-            data.folder = os.path.dirname(os.path.dirname(fname[0]))
+            self.startFolder = os.path.dirname(os.path.dirname(fname[0]))
             # Save this to use in SATS_gui
             self.folder = os.path.dirname(fname[0])
             self.setLog.emit(os.path.dirname(fname[0]))
@@ -361,14 +378,13 @@ class LoadingThread(QObject):
             # If not singular files in folder, load as interleaved stack
             self.mode = 'stack'
             self.setLog.emit("Stack mode")
-            self.imageDrpOrig, self.imageMitoOrig = loadTifStack(fname[0], order=data.order)
+            self.imageDrpOrig, self.imageMitoOrig = loadTifStack(fname[0], order=self.dataOrder)
             # Save this to go back to when the user wants to load another file
-            data.folder = os.path.dirname(fname[0])
-            self.folder = data.folder
+            self.startFolder = os.path.dirname(fname[0])
             self.setLog.emit(fname[0])
         self.updateProgressRange.emit(self.imageDrpOrig.shape[0])
 
-    def _loadData(self, data):
+    def _loadData(self):
         """load tif stack or ATS folder into the GUI. Reports progress using a textbox and the
         progress bar.
         """
@@ -382,7 +398,7 @@ class LoadingThread(QObject):
         self.nnOutput = np.zeros((self.frameNum, self.postSize, self.postSize))
         self.mitoDataFull = np.zeros_like(self.nnOutput)
         self.drpDataFull = np.zeros_like(self.nnOutput)
-        outputData = []
+        self.outputData = []
         self.nnRecalculated = np.zeros(self.frameNum)
 
         # Process data for all frames that where found
@@ -398,7 +414,7 @@ class LoadingThread(QObject):
                 nnDataPres = 1
             else:
                 nnDataPres = 0
-                outputPredict = data.model.predict_on_batch(inputData)
+                outputPredict = self.model.predict_on_batch(inputData)
                 self.nnRecalculated[frame] = 1
 
             # Stitch the tiles made back together
@@ -416,8 +432,8 @@ class LoadingThread(QObject):
                 i += 1
 
             # Get the output data from the nn channel and its position
-            outputData.append(np.max(self.nnOutput[frame, :, :]))
-            self.maxPos.append(list(zip(*np.where(self.nnOutput[frame] == outputData[-1]))))
+            self.outputData.append(np.max(self.nnOutput[frame, :, :]))
+            self.maxPos.append(list(zip(*np.where(self.nnOutput[frame] == self.outputData[-1]))))
             self.change_progress.emit(frame)
             # QApplication.processEvents()
 
@@ -434,29 +450,6 @@ class LoadingThread(QObject):
             # QApplication.processEvents()
         self.imageDrpOrig = np.array(imageDrpOrigScaled).astype(np.uint8)
         self.imageMitoOrig = np.array(imageMitoOrigScaled).astype(np.uint8)
-
-        # Make a rolling mean of the output Data
-        # N = 10
-        # outputDataSmooth = np.ones(len(outputData))
-        # outputDataSmooth[0:N] = np.ones(N)*np.mean(outputData[0:N])
-        # for x in range(N, len(outputData)):
-        #     outputDataSmooth[x] = np.sum(outputData[x-N:x])/N
-
-        # Make the SATS_GUI plot for nn_output vs time
-        # QApplication.processEvents()
-        data.outputPlot.deleteRects()
-        data.outputPlot.frames.setData([])
-        data.outputPlot.nnframeScatter.setData([])
-        if self.mode == 'stack':
-            data.outputPlot.nnline.setData(outputData)
-            data.outputPlot.scatter.setData(range(0, len(outputData)), outputData)
-        else:
-            self.setLabel.emit('Getting the timing data')
-            data.outputPlot.loadData(self.folder, data.progress, data.app)
-            QApplication.processEvents()
-            for i in range(-1, 6):
-                data.outputPlot.inc = i
-                data.outputPlot.updatePlot()
 
         return self
 

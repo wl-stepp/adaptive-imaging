@@ -59,7 +59,7 @@ def prepareNNImages(mitoFull, drpFull, nnImageSize=128):
     mitoFull = mitoFull.reshape(1, mitoFull.shape[0], mitoFull.shape[0], 1)
     inputDataFull = np.concatenate((mitoFull, drpFull), axis=3)
 
-    # Cycle through these tiles abd make one array for everything
+    # Cycle through these tiles and make one array for everything
     i = 0
     inputData = np.zeros((positions['n']**2, nnImageSize, nnImageSize, 2))
     for position in positions['px']:
