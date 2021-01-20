@@ -21,6 +21,10 @@ from tensorflow import keras
 from NNfeeder import prepareNNImages
 from NNio import loadTifStack
 
+#
+#                          USER SETTINGS
+#
+
 stack = ('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/'
          'sample1/sample1_cell_3/sample1_cell_3_MMStack_Pos0.ome.tif')
 modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/model_Dora.h5'
@@ -33,6 +37,10 @@ if not extSettings:
     thresholdUp = 100
     slowRate = 5  # in seconds
     # The fast frame rate is the rate of the original file for now.
+
+    #
+    #               USER SETTTINGS END
+    #
 
     # Save these settings for later documentation
     settings = {'lowerThreshold': thresholdLow, 'upperThreshold': thresholdUp,
