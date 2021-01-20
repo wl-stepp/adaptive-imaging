@@ -17,5 +17,6 @@
     "nnImageSize": 128,
     "lowerThreshold": 70,
     "upperThreshold": 90,
-    "slowRate": 5
+    "slowRate": 5,
+    "minFastFrames": 5
 }

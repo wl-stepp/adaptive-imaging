@@ -26,7 +26,7 @@ from NNio import loadTifStack
 #
 
 stack = ('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/'
-         'sample1/sample1_cell_3/sample1_cell_3_MMStack_Pos0.ome.tif')
+         'sample1/sample1_cell_3/sample1_cell_3_MMStack_Pos0_2.ome.tif')
 modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/model_Dora.h5'
 # Should we get the settings from the central settings file?
 extSettings = True
@@ -37,14 +37,14 @@ if not extSettings:
     thresholdUp = 100
     slowRate = 5  # in seconds
     # The fast frame rate is the rate of the original file for now.
-
+    minFastFrames = 5  # minimal number of fast frames after switching to fast. Should be > 2
     #
     #               USER SETTTINGS END
     #
 
     # Save these settings for later documentation
     settings = {'lowerThreshold': thresholdLow, 'upperThreshold': thresholdUp,
-                 'slowRate': slowRate}
+                'slowRate': slowRate, 'minFastFrames': minFastFrames}
 else:
     # if extSettings is True, load the settings from the json file
     with open('./ATS_settings.json') as file:
@@ -52,6 +52,7 @@ else:
         thresholdLow = settings['lowerThreshold']
         thresholdUp = settings['upperThreshold']
         slowRate = settings['slowRate']
+        minFastFrames = settings['minFastFrames']
 
 # Make a new folder to put the output in
 newFolder = re.split(r'.tif', stack)[0] + '_ATS'
@@ -146,7 +147,7 @@ while frame < DrpOrig.shape[0]-1:
             print('FAST mode')
             fastMode = True
             fastCount = 0
-        elif outputData[-2] < thresholdLow and fastMode and fastCount > 2:
+        elif outputData[-2] < thresholdLow and fastMode and fastCount > minFastFrames - 1:
             print('SLOW mode')
             fastMode = False
 
