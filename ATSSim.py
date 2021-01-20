@@ -1,6 +1,9 @@
 """ Take fixed framerate data and perform a simulation of ATS (adaptive temporal sampling) on
 this data to see what performance would have been if ATS was used.
 
+All the parameters are directly after the imports. As a default also the settings from the central
+ATS_settings.json file can be used.
+
 Created on Tue Jan  5 11:03:50 2021
 
 @author: Willi Stepp
@@ -19,28 +22,50 @@ from NNfeeder import prepareNNImages
 from NNio import loadTifStack
 
 stack = ('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/'
-         'sample1/sample1_cell_3/sample1_cell_3_MMStack_Pos0_4.ome.tif')
+         'sample1/sample1_cell_3/sample1_cell_3_MMStack_Pos0.ome.tif')
+modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/model_Dora.h5'
+# Should we get the settings from the central settings file?
+extSettings = True
+
+if not extSettings:
+    # if extSettings is set to False, you can set the settings to be used here
+    thresholdLow = 80
+    thresholdUp = 100
+    slowRate = 5  # in seconds
+    # The fast frame rate is the rate of the original file for now.
+
+    # Save these settings for later documentation
+    settings = {'lowerThreshold': thresholdLow, 'upperThreshold': thresholdUp,
+                 'slowRate': slowRate}
+else:
+    # if extSettings is True, load the settings from the json file
+    with open('./ATS_settings.json') as file:
+        settings = json.load(file)
+        thresholdLow = settings['lowerThreshold']
+        thresholdUp = settings['upperThreshold']
+        slowRate = settings['slowRate']
+
+# Make a new folder to put the output in
 newFolder = re.split(r'.tif', stack)[0] + '_ATS'
 if os.path.exists(newFolder):
     shutil.rmtree(newFolder)
 os.mkdir(newFolder)
 
+# Save the settings that were used for this run
+settingsFile = os.path.join(newFolder, 'ATSSim_settings.json')
+with open(settingsFile, 'w') as fp:
+    json_string = json.dumps(settings, default=lambda o: o.__dict__, sort_keys=True, indent=2)
+    fp.write(json_string)
+
+# Make the file that simulates the NetworkWatchdog txt file output
 txtFile = os.path.join(newFolder, 'output.txt')
 file = open(txtFile, 'w')
 file.close()
 file = open(txtFile, 'a')
 
-
-modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/model_Dora.h5'
-model = keras.models.load_model(modelPath, compile=True)
-print('model loaded')
-thresholdLow = 80
-thresholdUp = 100
-slowRate = 5  # in seconds
-
-
 DrpOrig, MitoOrig, DrpTimes, MitoTimes = loadTifStack(stack, 1, outputElapsed=True)
-print('stack loaded')
+model = keras.models.load_model(modelPath, compile=True)
+print('stack and model loaded')
 
 time = DrpTimes[0]
 frame = 0

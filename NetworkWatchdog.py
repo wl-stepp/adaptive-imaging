@@ -20,8 +20,9 @@ import json
 import os
 import re  # Regular expression module
 import sys
-from datetime import datetime
 import time
+from datetime import datetime
+
 import numpy as np
 import pyqtgraph as pg
 # Qt display imports
@@ -59,7 +60,7 @@ class NetworkWatchdog(QWidget):
     def __init__(self):
         # Set if channels are used in Micromanager
         self.channels = True
-        
+
         # Read settings from the json file depending on which computer we are on
         with open('./ATS_settings.json') as file:
             self.settings = json.load(file)[os.environ['COMPUTERNAME'].lower()]
@@ -121,7 +122,7 @@ class NetworkWatchdog(QWidget):
 
         # More settings for the Watchdos
         path = self.settings['imageFolder']
-        print('FOLDERFOLDERFOLDER', path)
+        print('Folder:', path)
         goRecursively = True
         self.myObserver = Observer()
         self.myObserver.schedule(
@@ -143,7 +144,7 @@ class NetworkWatchdog(QWidget):
         self.outputHistogram = None
         self.outputX = None
         self.maxPos = None
-        
+
         self.frameNumOld = 100
         self.inputSizeOld = 0
         self.folderNameOld = 'noFolder'
@@ -224,7 +225,7 @@ class NetworkWatchdog(QWidget):
         if self.channels:
             print('frame', frameNum)
         else:
-             print('frame', int((frameNum-1)/2))   
+             print('frame', int((frameNum-1)/2))
         # Read the mito image first, as it should already be written
         # mitoFull = io.imread(mitoPath)
         # drpFull = io.imread(event.src_path)
