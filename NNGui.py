@@ -395,7 +395,7 @@ class LoadingThread(QObject):
         # Initialize values and data for neural network
         self.frameNum = self.imageMitoOrig.shape[0]
         self.postSize = round(self.imageMitoOrig.shape[1]*self.resizeParam)
-        if self.mode = 'stack':
+        if self.mode == 'stack':
             self.nnOutput = np.zeros((self.frameNum, self.postSize, self.postSize))
         self.mitoDataFull = np.zeros_like(self.nnOutput)
         self.drpDataFull = np.zeros_like(self.nnOutput)
