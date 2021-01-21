@@ -26,7 +26,7 @@ from NNio import loadTifStack
 #
 
 stack = ('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/'
-         'sample1/sample1_cell_3/sample1_cell_3_MMStack_Pos0_2.ome.tif')
+         'sample1/sample1_cell_3/sample1_cell_3_MMStack_Pos0_3.ome.tif')
 modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/model_Dora.h5'
 # Should we get the settings from the central settings file?
 extSettings = True

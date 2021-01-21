@@ -141,17 +141,13 @@ def loadTifFolder(folder, resizeParam=1, order=0, progress=None) -> np.ndarray:
         # Progress the bar if available
         # if progress is not None:
             # progress.setValue(frameNum)
+    stack1 = np.array(stack1)
+    stack2 = np.array(stack2)
 
     if order == 0:
-        stack1 = np.array(stack1)
-        stack2 = np.array(stack2)
+        return stack1, stack2, stackNN
     else:
-        stack1Save = stack1
-        stack1 = np.array(stack2)
-        stack2 = np.array(stack1Save)
-
-    return stack1, stack2, stackNN
-
+        return stack2, stack1, stackNN
 
 def loadTifStack(stack, order=0, outputElapsed=False):
     """ Load a tif stack and deinterleave depending on the order (0 or 1) """
