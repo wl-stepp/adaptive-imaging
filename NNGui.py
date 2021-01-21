@@ -395,7 +395,8 @@ class LoadingThread(QObject):
         # Initialize values and data for neural network
         self.frameNum = self.imageMitoOrig.shape[0]
         self.postSize = round(self.imageMitoOrig.shape[1]*self.resizeParam)
-        self.nnOutput = np.zeros((self.frameNum, self.postSize, self.postSize))
+        if self.mode = 'stack':
+            self.nnOutput = np.zeros((self.frameNum, self.postSize, self.postSize))
         self.mitoDataFull = np.zeros_like(self.nnOutput)
         self.drpDataFull = np.zeros_like(self.nnOutput)
         self.outputData = []
@@ -410,6 +411,7 @@ class LoadingThread(QObject):
                 self.imageDrpOrig[frame, :, :], self.nnImageSize)
 
             # Do the NN calculation if there is not already a file there
+            print(np.max(self.nnOutput[frame]))
             if self.mode == 'folder' and np.max(self.nnOutput[frame]) > 0:
                 nnDataPres = 1
             else:
