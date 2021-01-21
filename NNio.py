@@ -93,7 +93,7 @@ def resaveNN(folder):
         print(filePath)
 
 
-def loadTifFolder(folder, resizeParam=1, order=0, progress=None) -> np.ndarray:
+def loadTifFolder(folder, resizeParam=1, order=0, progress=None, cropSquare=True) -> np.ndarray:
     """Function to load SATS data from a folder with the individual tif files written by
     microManager. Inbetween there might be neural network images that are also loaded into
     an array. Mainly used with NN_GUI_v2.py
@@ -144,12 +144,43 @@ def loadTifFolder(folder, resizeParam=1, order=0, progress=None) -> np.ndarray:
     stack1 = np.array(stack1)
     stack2 = np.array(stack2)
 
+
+    # Check if this data is rectangular and crop if necessary
+    if cropSquare:
+        stack1 = cropToSquare(stack1)
+        stack2 = cropToSquare(stack2)
+
     if order == 0:
         return stack1, stack2, stackNN
     else:
         return stack2, stack1, stackNN
 
-def loadTifStack(stack, order=0, outputElapsed=False):
+
+def cropToSquare(stack):
+    """ Crop a rectangular stack to a square. Should also work for single images """
+    dimensions = len(stack.shape())
+    diffShape = stack.shape[dimensions - 2] - stack.shape[dimensions - 1]
+    if diffShape > 0:
+        print('Shape is not rectangular going to crop')
+        if dimensions == 3:
+            stack[:, np.floor(diffShape/2):np.floor(stack.shape[dimensions-2]-diffShape/2), :]
+        elif dimensions == 2:
+            stack[:, np.floor(diffShape/2):np.floor(stack.shape[dimensions-2]-diffShape/2), :]
+        else:
+            print('Image has wrong dimensions')
+    elif diffShape < 0:
+        print('Shape is not rectangular going to crop')
+        if dimensions == 3:
+            stack[:, :, np.floor(diffShape/2):np.floor(stack.shape[dimensions-1]-diffShape/2)]
+        elif dimensions == 2:
+            stack[:, ;, np.floor(diffShape/2):np.floor(stack.shape[dimensions-1]-diffShape/2)]
+        else:
+            print('Image has wrong dimensions')
+
+    return stack
+
+
+def loadTifStack(stack, order=0, outputElapsed=False, cropSquare=True):
     """ Load a tif stack and deinterleave depending on the order (0 or 1) """
     start1 = order
     start2 = np.abs(order-1)
@@ -172,6 +203,12 @@ def loadTifStack(stack, order=0, outputElapsed=False):
     elapsed1 = elapsed[start1::2]
     stack2 = imageMitoOrig[start2::2]
     elapsed2 = elapsed[start2::2]
+
+    # Check if this data is rectangular and crop if necessary
+    if cropSquare:
+        stack1 = cropToSquare(stack1)
+        stack2 = cropToSquare(stack2)
+
     return (stack1, stack2, elapsed1, elapsed2) if outputElapsed else (stack1, stack2)
 
 

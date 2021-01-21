@@ -217,6 +217,8 @@ class NNGui(QWidget):
         self.onTimer()
         # set up the progress bar
         self.frameSlider.setDisabled(False)
+        print(self.threads)
+        self.threads[0][0].stop()
 
     def updateProgress(self, rangeMax):
         """ Set the range of the progress bar """
@@ -319,6 +321,11 @@ class NNGui(QWidget):
         i = self.frameSlider.value()
         self.frameSlider.setValue(i - 1)
         self.onTimer()
+
+    def closeEvent(self, event):
+        """ Terminate the threads that are running"""
+        for thread in self.threads:
+            thread[0].quit()
 
 
 class LoadingThread(QObject):
