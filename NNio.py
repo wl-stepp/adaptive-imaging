@@ -144,7 +144,6 @@ def loadTifFolder(folder, resizeParam=1, order=0, progress=None, cropSquare=True
     stack1 = np.array(stack1)
     stack2 = np.array(stack2)
 
-
     # Check if this data is rectangular and crop if necessary
     if cropSquare:
         stack1 = cropToSquare(stack1)
@@ -158,22 +157,26 @@ def loadTifFolder(folder, resizeParam=1, order=0, progress=None, cropSquare=True
 
 def cropToSquare(stack):
     """ Crop a rectangular stack to a square. Should also work for single images """
-    dimensions = len(stack.shape())
+    dimensions = len(stack.shape)
+    print(stack.shape)
     diffShape = stack.shape[dimensions - 2] - stack.shape[dimensions - 1]
+    start = int(np.floor(abs(diffShape/2)))
     if diffShape > 0:
         print('Shape is not rectangular going to crop')
+        end = int(np.floor(stack.shape[dimensions-2]-abs(diffShape/2)))
         if dimensions == 3:
-            stack[:, np.floor(diffShape/2):np.floor(stack.shape[dimensions-2]-diffShape/2), :]
+            stack = stack[:, start:end, :]
         elif dimensions == 2:
-            stack[:, np.floor(diffShape/2):np.floor(stack.shape[dimensions-2]-diffShape/2), :]
+            stack = stack[start:end, :]
         else:
             print('Image has wrong dimensions')
     elif diffShape < 0:
         print('Shape is not rectangular going to crop')
+        end = int(np.floor(stack.shape[dimensions-1]-abs(diffShape/2)))
         if dimensions == 3:
-            stack[:, :, np.floor(diffShape/2):np.floor(stack.shape[dimensions-1]-diffShape/2)]
+            stack = stack[:, :, start:end]
         elif dimensions == 2:
-            stack[:, ;, np.floor(diffShape/2):np.floor(stack.shape[dimensions-1]-diffShape/2)]
+            stack = stack[:, start:end]
         else:
             print('Image has wrong dimensions')
 
@@ -186,22 +189,35 @@ def loadTifStack(stack, order=0, outputElapsed=False, cropSquare=True):
     start2 = np.abs(order-1)
     imageMitoOrig = io.imread(stack)
 
+    print(imageMitoOrig.shape)
+    if len(imageMitoOrig.shape) == 4:
+        # This file probably has channels for the different data
+        channels = imageMitoOrig.shape[1]
+        stack1 = imageMitoOrig[:, start1, :, :]
+        stack2 = imageMitoOrig[:, start2, :, :]
+    else:
+        channels = 1
+        stack1 = imageMitoOrig[start1::2]
+        stack2 = imageMitoOrig[start2::2]
+
+    # This could be done also more flexible with a matrix or dict
+
     elapsed = []
     # get elapsed from tif file
-    print(imageMitoOrig.shape)
     with tifffile.TiffFile(stack, fastij=False) as tif:
         mdInfo = tif.ome_metadata  # pylint: disable=E1136  # pylint/issues/3139
-        if mdInfo is not None:
-            mdInfoDict = xmltodict.parse(mdInfo)
-            for frame in range(0, imageMitoOrig.shape[0]):
-                elapsed.append(float(
-                    mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaT']))
-            print(elapsed[-1])
+        # This should work for single series ome.tifs
+        mdInfoDict = xmltodict.parse(mdInfo)
+        for frame in range(0, imageMitoOrig.shape[0]*channels):
+            # Check which unit the DeltaT is
+            if mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaTUnit'] == 's':
+                unitMultiplier = 1000
+            else:
+                unitMultiplier = 1
+            elapsed.append(unitMultiplier*float(
+                mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaT']))
 
-    # Deinterleave data
-    stack1 = imageMitoOrig[start1::2]
     elapsed1 = elapsed[start1::2]
-    stack2 = imageMitoOrig[start2::2]
     elapsed2 = elapsed[start2::2]
 
     # Check if this data is rectangular and crop if necessary

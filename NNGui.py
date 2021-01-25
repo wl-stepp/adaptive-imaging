@@ -21,7 +21,7 @@ from PyQt5.QtCore import QObject, Qt, QThread, QTimer, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import (QApplication, QFileDialog, QGridLayout, QGroupBox,
                              QLabel, QPlainTextEdit, QProgressBar, QPushButton,
                              QSlider, QWidget)
-from skimage import transform
+from skimage import exposure, transform
 from tensorflow import keras
 
 from NNfeeder import prepareNNImages
@@ -217,8 +217,6 @@ class NNGui(QWidget):
         self.onTimer()
         # set up the progress bar
         self.frameSlider.setDisabled(False)
-        print(self.threads)
-        self.threads[0][0].stop()
 
     def updateProgress(self, rangeMax):
         """ Set the range of the progress bar """
@@ -322,7 +320,7 @@ class NNGui(QWidget):
         self.frameSlider.setValue(i - 1)
         self.onTimer()
 
-    def closeEvent(self, event):
+    def closeEvent(self):
         """ Terminate the threads that are running"""
         for thread in self.threads:
             thread[0].quit()
@@ -418,7 +416,6 @@ class LoadingThread(QObject):
                 self.imageDrpOrig[frame, :, :], self.nnImageSize)
 
             # Do the NN calculation if there is not already a file there
-            print(np.max(self.nnOutput[frame]))
             if self.mode == 'folder' and np.max(self.nnOutput[frame]) > 0:
                 nnDataPres = 1
             else:
@@ -457,6 +454,16 @@ class LoadingThread(QObject):
                                                        anti_aliasing=True, preserve_range=True)
             self.change_progress.emit(i)
             # QApplication.processEvents()
+
+        # Rescale the exposures
+        imageDrpOrigScaled = exposure.rescale_intensity(
+            np.array(imageDrpOrigScaled), (np.min(np.array(imageDrpOrigScaled)),
+                                           np.max(np.array(imageDrpOrigScaled))),
+            out_range=(0, 255))
+        imageMitoOrigScaled = exposure.rescale_intensity(
+            np.array(imageMitoOrigScaled), (np.min(np.array(imageMitoOrigScaled)),
+                                            np.max(np.array(imageMitoOrigScaled))),
+            out_range=(0, 255))
         self.imageDrpOrig = np.array(imageDrpOrigScaled).astype(np.uint8)
         self.imageMitoOrig = np.array(imageMitoOrigScaled).astype(np.uint8)
 

@@ -26,16 +26,19 @@ from NNio import loadTifStack
 #
 
 stack = ('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/'
-         'sample1/sample1_cell_3/sample1_cell_3_MMStack_Pos0_4.ome.tif')
+         'sample1/sample1_cell_2/sample1_cell_2_MMStack_Pos0_1.ome.tif')
+stack = ('C:/Users/stepp/Documents/02_Raw/Caulobacter_Zenodo/160622_CB15N_MTS-mCherry_FtsZ-GFP_22/'
+         'SIM images/Series04.ome.tiff')
 modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/model_Dora.h5'
 # Should we get the settings from the central settings file?
-extSettings = True
+extSettings = False
+dataOrder = 0  # 0 for drp/foci first, 1 for mito/structure first
 
 if not extSettings:
     # if extSettings is set to False, you can set the settings to be used here
-    thresholdLow = 80
-    thresholdUp = 100
-    slowRate = 5  # in seconds
+    thresholdLow = 70
+    thresholdUp = 90
+    slowRate = 600  # in seconds
     # The fast frame rate is the rate of the original file for now.
     minFastFrames = 5  # minimal number of fast frames after switching to fast. Should be > 2
     #
@@ -44,7 +47,7 @@ if not extSettings:
 
     # Save these settings for later documentation
     settings = {'lowerThreshold': thresholdLow, 'upperThreshold': thresholdUp,
-                'slowRate': slowRate, 'minFastFrames': minFastFrames}
+                'slowRate': slowRate, 'minFastFrames': minFastFrames, 'dataOrder': dataOrder}
 else:
     # if extSettings is True, load the settings from the json file
     with open('./ATS_settings.json') as file:
@@ -53,6 +56,7 @@ else:
         thresholdUp = settings['upperThreshold']
         slowRate = settings['slowRate']
         minFastFrames = settings['minFastFrames']
+        settings['dataOrder'] = dataOrder
 
 # Make a new folder to put the output in
 newFolder = re.split(r'.tif', stack)[0] + '_ATS'
@@ -72,7 +76,7 @@ file = open(txtFile, 'w')
 file.close()
 file = open(txtFile, 'a')
 
-DrpOrig, MitoOrig, DrpTimes, MitoTimes = loadTifStack(stack, 1, outputElapsed=True)
+DrpOrig, MitoOrig, DrpTimes, MitoTimes = loadTifStack(stack, dataOrder, outputElapsed=True)
 model = keras.models.load_model(modelPath, compile=True)
 print('stack and model loaded')
 
@@ -173,7 +177,14 @@ while frame < DrpOrig.shape[0]-1:
     else:
         # jump slowRate seconds and find which frame would be closest to this
         time = time + slowRate*1000
+        oldFrame = frame
         frame = min(range(len(DrpTimes)), key=lambda i: abs(DrpTimes[i]-time))
+        # check if it will jump at least one frame if not, jump one
+        if oldFrame == frame:
+            frame = frame + 1
+        if frame - oldFrame == 1:
+            print('Jumped one frame. slowRate might not be big enough.')
+
         time = DrpTimes[frame]
 
     outputFrame = outputFrame + 1
