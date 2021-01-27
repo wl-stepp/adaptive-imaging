@@ -6,6 +6,7 @@
 import itertools
 
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.axes import Axes
 from skimage import io
 
@@ -120,6 +121,21 @@ def getTilePositionsV2(image, targetSize=128):
         positions['px'].append(positionXY)
 
     return positions
+
+
+def stitchImage(data, positions, channel=0):
+    """ stitch an image back together that has been tiled by NNfeeder.prepareNNImages """
+    stitch = positions['stitch']
+    stitchedImageSize = int(np.sqrt(len(positions['px']))*(data.shape[1] - stitch))
+    stitchedImage = np.zeros([stitchedImageSize, stitchedImageSize])
+    stitch1 = None if stitch == 0 else -stitch
+    i = 0
+    for position in positions['px']:
+        stitchedImage[position[0]+stitch:position[2]-stitch,
+                      position[1]+stitch:position[3]-stitch] = \
+            data[i, stitch:stitch1, stitch:stitch1, channel]
+        i = i + 1
+    return stitchedImage
 
 
 def main():

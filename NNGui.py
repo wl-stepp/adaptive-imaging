@@ -11,6 +11,7 @@ Created on Mon Oct  5 12:18:48 2020
 
 @author: stepp
 """
+import json
 import os
 import re
 import sys
@@ -163,6 +164,7 @@ class NNGui(QWidget):
         self.drpDataFull = None
         self.maxPos = None
         self.nnRecalculated = None
+        self.settings = None
         self.folder = 'C:/Users/stepp/Documents/02_Raw/SmartMito/'
 
         self.app = app
@@ -213,6 +215,13 @@ class NNGui(QWidget):
             for i in range(-1, 6):
                 self.outputPlot.inc = i
                 self.outputPlot.updatePlot()
+
+        # Adjust the lines to fit what was used
+        if data.settings is not None:
+            with open(data.settings) as file:
+                self.settings = json.load(file)
+            self.outputPlot.thrLine1.setPos(self.settings['lowerThreshold'])
+            self.outputPlot.thrLine2.setPos(self.settings['upperThreshold'])
 
         self.onTimer()
         # set up the progress bar
@@ -320,7 +329,7 @@ class NNGui(QWidget):
         self.frameSlider.setValue(i - 1)
         self.onTimer()
 
-    def closeEvent(self):
+    def closeEvent(self, _):
         """ Terminate the threads that are running"""
         for thread in self.threads:
             thread[0].quit()
@@ -350,6 +359,7 @@ class LoadingThread(QObject):
         self.postSize = None
         self.frameNum = None
         self.maxPos = []
+        self.settings = None
         self.folder = None
         self.nnImageSize = 128
         self.pixelCalib = 56  # nm per pixel
@@ -379,6 +389,9 @@ class LoadingThread(QObject):
             # Save this to use in SATS_gui
             self.folder = os.path.dirname(fname[0])
             self.setLog.emit(os.path.dirname(fname[0]))
+            # Check if this folder was written by ATSSim
+            if os.path.exists(self.folder + '/ATSSim_settings.json'):
+                self.settings = self.folder + '/ATSSim_settings.json'
         else:
             # If not singular files in folder, load as interleaved stack
             self.mode = 'stack'

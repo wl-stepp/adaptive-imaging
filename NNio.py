@@ -9,10 +9,15 @@ import os
 import re
 
 import imageio
+import matplotlib.pyplot as plt
 import numpy as np
 import tifffile
 import xmltodict
+from PIL import Image
 from skimage import io
+
+import ImageTiles
+import NNfeeder
 
 
 def loadiSIMmetadata(folder):
@@ -64,6 +69,8 @@ def loadElapsedTime(folder, progress=None, app=None):
     for filePath in glob.glob(folder + '/img_*.tif'):
         with tifffile.TiffFile(filePath) as tif:
             mdInfo = tif.imagej_metadata['Info']  # pylint: disable=E1136  # pylint/issues/3139
+            if mdInfo is None:
+                mdInfo = tif.shaped_metadata[0]['Infos'] # pylint: disable=E1136
             mdInfoDict = json.loads(mdInfo)
             elapsed.append(mdInfoDict['ElapsedTime-ms'])
         if app is not None:
@@ -184,7 +191,8 @@ def cropToSquare(stack):
 
 
 def loadTifStack(stack, order=0, outputElapsed=False, cropSquare=True):
-    """ Load a tif stack and deinterleave depending on the order (0 or 1) """
+    """ Load a tif stack and deinterleave depending on the order (0 or 1). Also get the
+    elapsed time on the images and give them back as list."""
     start1 = order
     start2 = np.abs(order-1)
     imageMitoOrig = io.imread(stack)
@@ -228,6 +236,25 @@ def loadTifStack(stack, order=0, outputElapsed=False, cropSquare=True):
     return (stack1, stack2, elapsed1, elapsed2) if outputElapsed else (stack1, stack2)
 
 
+def loadTifStackElapsed(file):
+    """ this should ideally be added to loadElapsed """
+    elapsed = []
+    with PIL.Image(file) as tif:
+        tif.n_frames
+        mdInfo = tif.ome_metadata  # pylint: disable=E1136  # pylint/issues/3139
+        # This should work for single series ome.tifs
+        mdInfoDict = xmltodict.parse(mdInfo)
+        for frame in range(0, 2400):
+            # Check which unit the DeltaT is
+            if mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaTUnit'] == 's':
+                unitMultiplier = 1000
+            else:
+                unitMultiplier = 1
+            elapsed.append(unitMultiplier*float(
+                mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaT']))
+    return elapsed
+
+
 def savegif(stack, times, fps):
     """ Save a gif that uses the right frame duration read from the files. This can be sped up
     using the fps option"""
@@ -237,27 +264,138 @@ def savegif(stack, times, fps):
     imageio.mimsave(filePath, stack, duration=times)
 
 
+def extractTiffStack(file, frame, target):
+    """ It should be possible to get the elapsed time also for a single image. Therefore especially
+    when writing from ATSSim, I want to preserve both the OME metadata and the imagej metadata.
+    Unfortunately tifffile can't write both at the same time. So the imagej metadata is transferred
+    to the shaped_metadata. This also makes it easy to account for both possibilities when loading
+    data elsewhere. """
+    with tifffile.TiffFile(file, fastij=False) as tif:
+        mdInfo = tif.ome_metadata
+        ijInfo = tif.imagej_metadata
+
+    image = tifffile.imread(file, pages=frame)
+    mdInfoDict = xmltodict.parse(mdInfo)
+    ijInfoDict = json.loads(ijInfo['Info'])  # pylint: disable=E1136  # pylint/issues/3139
+
+    if mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaTUnit'] == 's':
+        unitMultiplier = 1000
+    else:
+        unitMultiplier = 1
+
+    elapsed = mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaT']*unitMultiplier
+
+    ijInfoDict['ElapsedTime-ms'] = elapsed
+    ijInfo['Info'] = json.dumps(ijInfoDict)  # pylint: disable=E1136  # pylint/issues/3139
+
+    # Save the metadata for this page
+    planeMD = mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]
+    # empty out the metadata for all the planes
+    mdInfoDict['OME']['Image']['Pixels']['Plane'] = []
+    # Set the old metadata as single object in a list
+    mdInfoDict['OME']['Image']['Pixels']['Plane'] = [planeMD]
+
+    # retranslate the dict to an xml string
+    mdInfo = xmltodict.unparse(mdInfoDict)
+    tifffile.imwrite(target, image, description=mdInfo.encode(encoding='UTF-8', errors='strict'),
+                     metadata={'Info': ijInfo['Info']})  # pylint: disable=E1136
+
+
+def calculateNNforStack(file, model=None):
+    """ calculate neural network output for all files in a stack """
+    dataOrder = 0 # 0 for drp/foci first, 1 for mito/structure first
+    if model is None:
+        from tensorflow import keras
+        modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/model_Dora.h5'
+        model = keras.models.load_model(modelPath, compile=True)
+
+    #DrpOrig, MitoOrig, elapsed, _ = loadTifStack(file, dataOrder,  outputElapsed=True)
+
+    nnPath = file[:-8] + '_nn.ome.tif'
+
+    DrpOrig, MitoOrig = loadTifStack(file, dataOrder)
+
+    for frame in range(DrpOrig.shape[0]):
+        printProgressBar(frame, DrpOrig.shape[0])
+        inputData, positions = NNfeeder.prepareNNImages(MitoOrig[frame, :, :],
+                                                        DrpOrig[frame, :, :], 128)
+        outputPredict = model.predict_on_batch(inputData)
+        if frame == 0:
+            nnSize = int(np.sqrt(len(positions['px']))*(outputPredict.shape[1]
+                                                        - positions['stitch']))
+            nnImage = np.zeros((int(DrpOrig.shape[0]/2), nnSize, nnSize), dtype=np.uint8)
+        nnImage[int(frame/2), :, :] = ImageTiles.stitchImage(outputPredict, positions)
+    with tifffile.TiffFile(file, fastij=False) as tif:
+        mdInfo = tif.ome_metadata.encode(encoding='UTF-8', errors='strict')
+    tifffile.imwrite(nnPath, nnImage, description=mdInfo)
+
+
 def main():
     """ Main method testing savegif """
+    files = ('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/'
+            'sample1/sample1_cell_3/sample1_cell_3_MMStack_Pos0_1.ome.tif')
+    directory = ('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/'
+            'sample1/sample1_cell_3')
+    files = [f for f in os.listdir(directory) if re.search(r'^.*MMStack.*\d.ome.tif', f)]
+    for file in files:
+        print(file)
+        calculateNNforStack(file)
 
-    from skimage import exposure
-    folder = (
-        "C:/Users/stepp/Documents/02_Raw/SmartMito/microM_test/"
-        "201208_cell_Int0s_30pc_488_50pc_561_band_5")
+    # target = 'C:/Users/stepp/Documents/05_Software/Analysis/test.ome.tiff'
+    # extractTiffStack(file ,11 , target)
 
-    stack1 = loadTifFolder(folder, 512/741, 0)[0]
-    times = loadElapsedTime(folder)
-    times = times[0::2]
-    times = (times - np.min(times))/1000
-    times = np.diff(times).tolist()
+    # with tifffile.TiffFile(target, fastij=False) as tif:
+    #     mdInfo = tif.ome_metadata
+    #     mdInfoDict = xmltodict.parse(mdInfo)
+    #     # ijInfoDict = json.loads(ijInfo)
+    #     print('THIS IS WHAT WE GET OUT')
+    #     print(mdInfoDict['OME']['Image']['Pixels']['Plane']['@DeltaT'])
 
-    print(len(times))
-    stack1 = exposure.rescale_intensity(
-            stack1, (np.min(stack1), np.max(stack1)), out_range=(0, 255))
-    stack1 = stack1.astype('uint8')
-    savegif(stack1, times, 10)
+    #     ijInfo = tif.shaped_metadata[0]
+    #     ijInfoDict = json.loads(ijInfo['Info'])
+    #     print(ijInfoDict['ElapsedTime-ms'])
 
-    print('Done')
+
+    # from skimage import exposure
+    # folder = (
+    #     "C:/Users/stepp/Documents/02_Raw/SmartMito/microM_test/"
+    #     "201208_cell_Int0s_30pc_488_50pc_561_band_5")
+
+    # stack1 = loadTifFolder(folder, 512/741, 0)[0]
+    # times = loadElapsedTime(folder)
+    # times = times[0::2]
+    # times = (times - np.min(times))/1000
+    # times = np.diff(times).tolist()
+
+    # print(len(times))
+    # stack1 = exposure.rescale_intensity(
+    #         stack1, (np.min(stack1), np.max(stack1)), out_range=(0, 255))
+    # stack1 = stack1.astype('uint8')
+    # savegif(stack1, times, 10)
+
+    # print('Done')
+
+
+def printProgressBar(iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
+    """
+    Call in a loop to create terminal progress bar
+    @params:
+        iteration   - Required  : current iteration (Int)
+        total       - Required  : total iterations (Int)
+        prefix      - Optional  : prefix string (Str)
+        suffix      - Optional  : suffix string (Str)
+        decimals    - Optional  : positive number of decimals in percent complete (Int)
+        length      - Optional  : character length of bar (Int)
+        fill        - Optional  : bar fill character (Str)
+        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
+    """
+    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    filledLength = int(length * iteration // total)
+    bar = fill * filledLength + '-' * (length - filledLength)
+    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
+    # Print New Line on Complete
+    if iteration == total:
+        print()
 
 
 if __name__ == '__main__':

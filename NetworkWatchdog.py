@@ -206,7 +206,7 @@ class NetworkWatchdog(QWidget):
         if self.channels:
             time.sleep(0.1)
             mitoFile = 'img_channel000_position000_time' \
-            + str((frameNum)).zfill(9) + '_z000.tif'
+                       + str((frameNum)).zfill(9) + '_z000.tif'
         else:
             mitoFile = 'img_channel000_position000_time' \
                 + str((frameNum-1)).zfill(9) + '_z000.tif'
@@ -225,7 +225,7 @@ class NetworkWatchdog(QWidget):
         if self.channels:
             print('frame', frameNum)
         else:
-             print('frame', int((frameNum-1)/2))
+            print('frame', int((frameNum-1)/2))
         # Read the mito image first, as it should already be written
         # mitoFull = io.imread(mitoPath)
         # drpFull = io.imread(event.src_path)
@@ -255,6 +255,7 @@ class NetworkWatchdog(QWidget):
             open(txtFile, 'w+')
             self.outputHistogram = []
             self.outputX = []
+            # Save the settings used for this run (TODO)
 
         # Preprocess the data and make tiles if necessary
         inputData, positions = prepareNNImages(
@@ -373,7 +374,7 @@ class NetworkWatchdog(QWidget):
     def onMoved(self, event):
         """ start when a file was used in the watchlocation. Could be removed(?) """
 
-    def closeEvent(self, event):
+    def closeEvent(self, _):
         """ Terminate the watchdogs and clean up when the windows of the GUI is closed """
         self.myObserver.stop()
         self.myObserver.join()
