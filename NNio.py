@@ -236,15 +236,16 @@ def loadTifStack(stack, order=0, outputElapsed=False, cropSquare=True):
     return (stack1, stack2, elapsed1, elapsed2) if outputElapsed else (stack1, stack2)
 
 
-def loadTifStackElapsed(file):
+def loadTifStackElapsed(file, numFrames=None):
     """ this should ideally be added to loadElapsed """
     elapsed = []
-    with PIL.Image(file) as tif:
-        tif.n_frames
+    with tifffile.TiffFile(file) as tif:
+        if numFrames is None:
+            numFrames = len(tif.pages)
         mdInfo = tif.ome_metadata  # pylint: disable=E1136  # pylint/issues/3139
         # This should work for single series ome.tifs
         mdInfoDict = xmltodict.parse(mdInfo)
-        for frame in range(0, 2400):
+        for frame in range(0, numFrames):
             # Check which unit the DeltaT is
             if mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaTUnit'] == 's':
                 unitMultiplier = 1000
@@ -309,12 +310,21 @@ def calculateNNforStack(file, model=None):
         modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/model_Dora.h5'
         model = keras.models.load_model(modelPath, compile=True)
 
-    #DrpOrig, MitoOrig, elapsed, _ = loadTifStack(file, dataOrder,  outputElapsed=True)
+    # DrpOrig, MitoOrig, elapsed, _ = loadTifStack(file, dataOrder,  outputElapsed=True)
 
     nnPath = file[:-8] + '_nn.ome.tif'
 
     DrpOrig, MitoOrig = loadTifStack(file, dataOrder)
 
+    # Prepare the Metadata for the new file by extracting the ome-metadata
+    with tifffile.TiffFile(file, fastij=False) as tif:
+        mdInfo = tif.ome_metadata.encode(encoding='UTF-8', errors='strict')
+        #extract only the planes that was written to
+        mdInfoDict = xmltodict.parse(mdInfo)
+        mdInfoDict['OME']['Image']['Pixels']['Plane'] = mdInfoDict['OME']['Image']['Pixels']['Plane'][0::2]
+        mdInfo = xmltodict.unparse(mdInfoDict).encode(encoding='UTF-8', errors='strict')
+
+    # Get each frame and calculate the nn-output for it
     for frame in range(DrpOrig.shape[0]):
         printProgressBar(frame, DrpOrig.shape[0])
         inputData, positions = NNfeeder.prepareNNImages(MitoOrig[frame, :, :],
@@ -323,23 +333,18 @@ def calculateNNforStack(file, model=None):
         if frame == 0:
             nnSize = int(np.sqrt(len(positions['px']))*(outputPredict.shape[1]
                                                         - positions['stitch']))
-            nnImage = np.zeros((int(DrpOrig.shape[0]/2), nnSize, nnSize), dtype=np.uint8)
-        nnImage[int(frame/2), :, :] = ImageTiles.stitchImage(outputPredict, positions)
-    with tifffile.TiffFile(file, fastij=False) as tif:
-        mdInfo = tif.ome_metadata.encode(encoding='UTF-8', errors='strict')
+            nnImage = np.zeros((int(DrpOrig.shape[0]), nnSize, nnSize), dtype=np.uint8)
+        nnImage[frame, :, :] = ImageTiles.stitchImage(outputPredict, positions)
+
+    # Write the whole stack to a tif file with description
     tifffile.imwrite(nnPath, nnImage, description=mdInfo)
 
 
 def main():
     """ Main method testing savegif """
-    files = ('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/'
+    file = ('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/'
             'sample1/sample1_cell_3/sample1_cell_3_MMStack_Pos0_1.ome.tif')
-    directory = ('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/'
-            'sample1/sample1_cell_3')
-    files = [f for f in os.listdir(directory) if re.search(r'^.*MMStack.*\d.ome.tif', f)]
-    for file in files:
-        print(file)
-        calculateNNforStack(file)
+    calculateNNforStack(file)
 
     # target = 'C:/Users/stepp/Documents/05_Software/Analysis/test.ome.tiff'
     # extractTiffStack(file ,11 , target)
