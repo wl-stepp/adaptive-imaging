@@ -9,7 +9,7 @@ import json
 import os
 import re
 from tkinter import messagebox
-
+from pathlib import Path
 import imageio
 import matplotlib.pyplot as plt
 import numpy as np
@@ -379,17 +379,17 @@ def addDataOrderMetadata(file, dataOrder=None):
 
 def cropOMETiff(file, cropPos):
     """ Crop a tif while conserving the metadata """
-    outFile = file[:-8] + '_crop.ome.tif'
-    command = 'bfconvert -overwrite -series 0 -range 0 ' + str(cropPos-1) + ' ' + file + ' ' + outFile
+    outFile = Path(file.as_posix()[:-8] + '_crop_lzw.ome.tif')
+    command = 'set BF_MAX_MEM=12g & ' + 'bfconvert -bigtiff -overwrite -compression LZW -range 0 ' + str(cropPos-1) + ' ' + file.as_posix() + ' ' + outFile.as_posix() + ' & timeout 15'
     print(command)
     os.system(command)
     print('adjusting metadata')
-    with tifffile.TiffReader(outFile) as reader:
+    with tifffile.TiffReader(outFile.as_posix()) as reader:
         mdInfo = xmltodict.parse(reader.ome_metadata)
         mdInfo['OME']['Image']['Pixels']['Plane'] = mdInfo['OME']['Image']['Pixels']['Plane'][0:cropPos]
         mdInfo['OME']['Image']['Pixels']['@SizeT'] = str(cropPos)
         mdInfo = xmltodict.unparse(mdInfo).encode(encoding='UTF-8', errors='strict')
-    tifffile.tifffile.tiffcomment(outFile, comment=mdInfo)
+    tifffile.tifffile.tiffcomment(outFile.as_posix(), comment=mdInfo)
     print('transfered metadata')
 
 
@@ -405,8 +405,8 @@ def checkblackFrames(file):
             maxImage = np.max(stack[frame])
             frame = frame - 1
     print('first frame with data: ' + str(frame+1) + '\n\n')
-    if frame + 1 < stack.shape[0]:
-        cropOMETiff(file, frame)
+    #if frame + 1 < stack.shape[0]:
+    #    cropOMETiff(file, frame)
 
 
 
@@ -414,10 +414,17 @@ def main():
     """ Main method calculating a nn stack for a set of old Mito/drp stacks """
     allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/'
                          '180420_DRP_mito_Dora/**/*MMStack*.ome.tif', recursive=True)
-
-    for file in allFiles:
-        print(file)
-        checkblackFrames(file)
+    files = [Path('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/180420_DRP_mito_Dora\sample1\sample1_cell_3_MMStack_Pos0_2.ome.tif'),
+             Path('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/180420_DRP_mito_Dora\sample1\sample1_cell_3_MMStack_Pos0_3.ome.tif')
+             ]
+    cropPos = [2000,
+               2000
+               ]
+               
+    
+    for i in range(len(files)):
+        print(files[i])
+        cropOMETiff(files[i], cropPos[i])
 
     # with tifffile.TiffFile(file) as tif:
         # mdInfo = xmltodict.parse(tif.ome_metadata)
