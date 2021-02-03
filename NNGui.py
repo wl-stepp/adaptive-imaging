@@ -401,6 +401,7 @@ class LoadingThread(QObject):
             self.startFolder = os.path.dirname(fname[0])
             self.setLog.emit(fname[0])
         self.updateProgressRange.emit(self.imageDrpOrig.shape[0])
+        self.setLog.emit('Data order: ' + str(self.dataOrder))
 
     def _loadData(self):
         """load tif stack or ATS folder into the GUI. Reports progress using a textbox and the

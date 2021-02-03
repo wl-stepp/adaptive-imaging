@@ -9,11 +9,13 @@ Created on Tue Jan  5 11:03:50 2021
 @author: Willi Stepp
 """
 
+import glob
 import json
 import os
 import re
 import shutil
 
+import matplotlib.pyplot as plt
 import numpy as np
 from skimage import io
 from tensorflow import keras
@@ -26,18 +28,31 @@ from NNio import loadTifStack
 #
 
 
-stacks = ('C:/Users/stepp/Documents/02_Raw/Caulobacter_Zenodo/'
-          '160613_ML2159_MTS-mCherry_FtsZ-GFP_80/'
-          'SIM images/Series5_copy.ome.tiff')
-stacks = [stacks]
+# stacks = ('C:/Users/stepp/Documents/02_Raw/Caulobacter_Zenodo/'
+#           '160613_ML2159_MTS-mCherry_FtsZ-GFP_80/'
+#           'SIM images/Series5_copy.ome.tiff')
+# stacks = [stacks]
+
+
 # Comment if only taking one stack
-# stacks = []
-# for i in range(1, 16):
-#     stacks.append(stack + str(i).zfill(2) + '.ome.tiff')
+allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/180420_drp_mito_Dora/**/*MMStack*_crop.ome.tif', recursive=True)
+
+# Just take the files that have not been analysed so far
+stacks = []
+for file in allFiles:
+    # nnFile = file[:-8] + '_nn.ome.tif'
+    atsFolder = file[:-4] + '_ATS'
+    # if not os.path.isfile(nnFile):
+    if not os.path.isdir(atsFolder):
+        stacks.append(file)
+print('\n'.join(stacks))
+
+# stacks = ['C:/Users/stepp/Desktop/sample1_cell_2_mmstack_pos0_1.ome.tif']
 modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/model_Dora.h5'
 # Should we get the settings from the central settings file?
-extSettings = False
+extSettings = True
 dataOrder = 0  # 0 for drp/foci first, 1 for mito/structure first
+# data Order will be tried to read from the metadata directly in [Description][@dataOrder]
 
 if not extSettings:
     # if extSettings is set to False, you can set the settings to be used here
@@ -88,6 +103,11 @@ for stack in stacks:
 
     DrpOrig, MitoOrig, DrpTimes, MitoTimes = loadTifStack(stack, dataOrder, outputElapsed=True)
     print('stack loaded')
+
+    # fig = plt.figure()
+    # fig.suptitle('This should be Drp')
+    # plt.imshow(DrpOrig[1])
+    # plt.show()
 
     time = DrpTimes[0]
     frame = 0
@@ -201,5 +221,12 @@ for stack in stacks:
         print(outputData[-1])
         print(frame)
         print('\n')
+
+        if outputData[-1] == 0:
+            f = open("ATSSim_logging.txt", "a")
+            f.write('\n outputData was 0 at frame')
+            f.write(str(frame*2))
+            f.write('\n' + stack + '\n' + '\n')
+            f.close()
 
     file.close()

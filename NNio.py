@@ -3,10 +3,12 @@ Input/Ouput module for data generated using the network_watchdog approach for ad
 sampling on the iSIM
 '''
 
+import contextlib
 import glob
 import json
 import os
 import re
+from tkinter import messagebox
 
 import imageio
 import matplotlib.pyplot as plt
@@ -133,7 +135,7 @@ def loadTifFolder(folder, resizeParam=1, order=0, progress=None, cropSquare=True
         splitStr = re.split(r'img_channel\d+_position\d+_time', os.path.basename(filePath))
         splitStr = re.split(r'_z\d+', splitStr[1])
         frameNum = int(splitStr[0])
-        if frameNum % 2:
+        if not frameNum % 2:
             # odd
             stack1[frame] = io.imread(filePath)
             nnPath = filePath[:-8] + 'nn.tiff'
@@ -141,9 +143,9 @@ def loadTifFolder(folder, resizeParam=1, order=0, progress=None, cropSquare=True
                 stackNN[frame] = io.imread(nnPath)
             except FileNotFoundError:
                 pass
-            frame = frame + 1
         else:
             stack2[frame] = io.imread(filePath)
+            frame = frame + 1
 
         # Progress the bar if available
         # if progress is not None:
@@ -193,29 +195,36 @@ def cropToSquare(stack):
 def loadTifStack(stack, order=0, outputElapsed=False, cropSquare=True):
     """ Load a tif stack and deinterleave depending on the order (0 or 1). Also get the
     elapsed time on the images and give them back as list."""
-    start1 = order
-    start2 = np.abs(order-1)
     imageMitoOrig = io.imread(stack)
 
     print(imageMitoOrig.shape)
-    if len(imageMitoOrig.shape) == 4:
-        # This file probably has channels for the different data
-        channels = imageMitoOrig.shape[1]
-        stack1 = imageMitoOrig[:, start1, :, :]
-        stack2 = imageMitoOrig[:, start2, :, :]
-    else:
-        channels = 1
-        stack1 = imageMitoOrig[start1::2]
-        stack2 = imageMitoOrig[start2::2]
-
-    # This could be done also more flexible with a matrix or dict
-
-    elapsed = []
-    # get elapsed from tif file
     with tifffile.TiffFile(stack, fastij=False) as tif:
+        # try to get dataOrder from file
         mdInfo = tif.ome_metadata  # pylint: disable=E1136  # pylint/issues/3139
         # This should work for single series ome.tifs
         mdInfoDict = xmltodict.parse(mdInfo)
+        try:
+            order = int(mdInfoDict['OME']['Image']['Description']['@dataOrder'])
+            print('order parameter was read from file: ', order)
+        except KeyError:
+            print('dataOrder not found in file using ', order)
+
+        start1 = order
+        start2 = np.abs(order-1)
+        if len(imageMitoOrig.shape) == 4:
+            # This file probably has channels for the different data
+            channels = imageMitoOrig.shape[1]
+            stack1 = imageMitoOrig[:, start1, :, :]
+            stack2 = imageMitoOrig[:, start2, :, :]
+        else:
+            channels = 1
+            stack1 = imageMitoOrig[start1::2]
+            stack2 = imageMitoOrig[start2::2]
+
+        # This could be done also more flexible with a matrix or dict
+
+        elapsed = []
+        # get elapsed from tif file
         for frame in range(0, imageMitoOrig.shape[0]*channels):
             # Check which unit the DeltaT is
             if mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaTUnit'] == 's':
@@ -236,7 +245,7 @@ def loadTifStack(stack, order=0, outputElapsed=False, cropSquare=True):
     return (stack1, stack2, elapsed1, elapsed2) if outputElapsed else (stack1, stack2)
 
 
-def loadTifStackElapsed(file, numFrames=None):
+def loadTifStackElapsed(file, numFrames=None, skipFrames=0):
     """ this should ideally be added to loadElapsed """
     elapsed = []
     with tifffile.TiffFile(file) as tif:
@@ -251,6 +260,8 @@ def loadTifStackElapsed(file, numFrames=None):
                 unitMultiplier = 1000
             else:
                 unitMultiplier = 1
+            if (frame % (skipFrames+1)) != 0:
+                continue
             elapsed.append(unitMultiplier*float(
                 mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaT']))
     return elapsed
@@ -303,8 +314,8 @@ def extractTiffStack(file, frame, target):
 
 
 def calculateNNforStack(file, model=None):
-    """ calculate neural network output for all files in a stack """
-    dataOrder = 0 # 0 for drp/foci first, 1 for mito/structure first
+    """ calculate neural network output for all frames in a stack and write to new stack """
+    dataOrder = 1  # 0 for drp/foci first, 1 for mito/structure first
     if model is None:
         from tensorflow import keras
         modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/model_Dora.h5'
@@ -314,7 +325,7 @@ def calculateNNforStack(file, model=None):
 
     nnPath = file[:-8] + '_nn.ome.tif'
 
-    DrpOrig, MitoOrig = loadTifStack(file, dataOrder)
+    DrpOrig, MitoOrig = loadTifStack(file, dataOrder, cropSquare=True)
 
     # Prepare the Metadata for the new file by extracting the ome-metadata
     with tifffile.TiffFile(file, fastij=False) as tif:
@@ -331,8 +342,8 @@ def calculateNNforStack(file, model=None):
                                                         DrpOrig[frame, :, :], 128)
         outputPredict = model.predict_on_batch(inputData)
         if frame == 0:
-            nnSize = int(np.sqrt(len(positions['px']))*(outputPredict.shape[1]
-                                                        - positions['stitch']))
+            nnSize = positions['px'][-1][-1]
+            print('\n', nnSize)
             nnImage = np.zeros((int(DrpOrig.shape[0]), nnSize, nnSize), dtype=np.uint8)
         nnImage[frame, :, :] = ImageTiles.stitchImage(outputPredict, positions)
 
@@ -340,11 +351,90 @@ def calculateNNforStack(file, model=None):
     tifffile.imwrite(nnPath, nnImage, description=mdInfo)
 
 
+def addDataOrderMetadata(file, dataOrder=None):
+    """ Add a Tag to the tif that states with dataOrder it has """
+    reader = tifffile.TiffReader(file)
+    if dataOrder is None:
+        mdInfo = xmltodict.parse(reader.ome_metadata)
+        try:
+            dataOrder = mdInfo['OME']['Image']['Description']['@dataOrder']
+            print(file)
+            print('dataOrder already there: ' + dataOrder)
+        except:
+            plt.imshow(reader.pages[0].asarray())
+            plt.show()
+            answer = messagebox.askyesno(title='dataOrder', message='Is this a mito image?')
+            dataOrder = 1 if answer else 0
+            print(dataOrder)
+
+            try:
+                mdInfo['OME']['Image']['Description']['@dataOrder'] = dataOrder
+            except TypeError:
+                mdInfo['OME']['Image']['Description'] = {'@dataOrder': dataOrder}
+            mdInfo = xmltodict.unparse(mdInfo).encode(encoding='UTF-8', errors='strict')
+            tifffile.tifffile.tiffcomment(file, comment=mdInfo)
+        reader = tifffile.TiffReader(file)
+        print(xmltodict.parse(reader.ome_metadata)['OME']['Image']['Description'])
+
+
+def cropOMETiff(file, cropPos):
+    """ Crop a tif while conserving the metadata """
+    outFile = file[:-8] + '_crop.ome.tif'
+    command = 'bfconvert -overwrite -series 0 -range 0 ' + str(cropPos-1) + ' ' + file + ' ' + outFile
+    print(command)
+    os.system(command)
+    print('adjusting metadata')
+    with tifffile.TiffReader(outFile) as reader:
+        mdInfo = xmltodict.parse(reader.ome_metadata)
+        mdInfo['OME']['Image']['Pixels']['Plane'] = mdInfo['OME']['Image']['Pixels']['Plane'][0:cropPos]
+        mdInfo['OME']['Image']['Pixels']['@SizeT'] = str(cropPos)
+        mdInfo = xmltodict.unparse(mdInfo).encode(encoding='UTF-8', errors='strict')
+    tifffile.tifffile.tiffcomment(outFile, comment=mdInfo)
+    print('transfered metadata')
+
+
+def checkblackFrames(file):
+    """ Test if there are black frames at the end of a tiff file """
+    with open(os.devnull, "w") as f, contextlib.redirect_stderr(f):
+        stack = io.imread(file)
+    print(stack.shape)
+    print(len(tifffile.TiffFile(file).pages))
+    frame = stack.shape[0] - 1
+    maxImage = 0
+    while maxImage == 0:
+            maxImage = np.max(stack[frame])
+            frame = frame - 1
+    print('first frame with data: ' + str(frame+1) + '\n\n')
+    if frame + 1 < stack.shape[0]:
+        cropOMETiff(file, frame)
+
+
+
 def main():
-    """ Main method testing savegif """
-    file = ('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/'
-            'sample1/sample1_cell_3/sample1_cell_3_MMStack_Pos0_1.ome.tif')
-    calculateNNforStack(file)
+    """ Main method calculating a nn stack for a set of old Mito/drp stacks """
+    allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/'
+                         '180420_DRP_mito_Dora/**/*MMStack*.ome.tif', recursive=True)
+
+    for file in allFiles:
+        print(file)
+        checkblackFrames(file)
+
+    # with tifffile.TiffFile(file) as tif:
+        # mdInfo = xmltodict.parse(tif.ome_metadata)
+        # print(mdInfo['OME']['Image']['Description'])
+
+    # Just take the files that have not been analysed so far
+    # files = []
+    # for file in allFiles:
+    #     # nnFile = file[:-8] + '_nn.ome.tif'
+    #     atsFolder = file[:-4] + '_ATS'
+    #     # if not os.path.isfile(nnFile):
+    #     if not os.path.isdir(atsFolder):
+    #         files.append(file)
+
+    # print('\n'.join(files))
+    # for file in files:
+        # calculateNNforStack(file)
 
     # target = 'C:/Users/stepp/Documents/05_Software/Analysis/test.ome.tiff'
     # extractTiffStack(file ,11 , target)
@@ -359,7 +449,6 @@ def main():
     #     ijInfo = tif.shaped_metadata[0]
     #     ijInfoDict = json.loads(ijInfo['Info'])
     #     print(ijInfoDict['ElapsedTime-ms'])
-
 
     # from skimage import exposure
     # folder = (

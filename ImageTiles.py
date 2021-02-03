@@ -126,7 +126,8 @@ def getTilePositionsV2(image, targetSize=128):
 def stitchImage(data, positions, channel=0):
     """ stitch an image back together that has been tiled by NNfeeder.prepareNNImages """
     stitch = positions['stitch']
-    stitchedImageSize = int(np.sqrt(len(positions['px']))*(data.shape[1] - stitch))
+    # This has to take into account that the last tiles are sometimes shifted
+    stitchedImageSize = positions['px'][-1][-1]
     stitchedImage = np.zeros([stitchedImageSize, stitchedImageSize])
     stitch1 = None if stitch == 0 else -stitch
     i = 0
