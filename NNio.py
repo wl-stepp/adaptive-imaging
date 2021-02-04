@@ -8,14 +8,15 @@ import glob
 import json
 import os
 import re
-from tkinter import messagebox
 from pathlib import Path
+from tkinter import messagebox
+
 import imageio
 import matplotlib.pyplot as plt
 import numpy as np
 import tifffile
 import xmltodict
-from PIL import Image
+from matplotlib.widgets import RectangleSelector
 from skimage import io
 
 import ImageTiles
@@ -351,7 +352,7 @@ def calculateNNforStack(file, model=None):
     tifffile.imwrite(nnPath, nnImage, description=mdInfo)
 
 
-def addDataOrderMetadata(file, dataOrder=None):
+def dataOrderMetadata(file, dataOrder=None):
     """ Add a Tag to the tif that states with dataOrder it has """
     reader = tifffile.TiffReader(file)
     if dataOrder is None:
@@ -375,19 +376,38 @@ def addDataOrderMetadata(file, dataOrder=None):
             tifffile.tifffile.tiffcomment(file, comment=mdInfo)
         reader = tifffile.TiffReader(file)
         print(xmltodict.parse(reader.ome_metadata)['OME']['Image']['Description'])
+    return dataOrder
 
 
-def cropOMETiff(file, cropPos):
+def cropOMETiff(file, cropFrame=None, cropRect=None):
     """ Crop a tif while conserving the metadata """
+    if cropFrame is None:
+        cropFrame = checkblackFrames(file.as_posix()) - 6
+        cropFrame = cropFrame if cropFrame % 2 else cropFrame - 1
+
+    if cropRect is True:
+        # Ask for where the file should be cropped
+        cropRect = defineCropRect(file.as_posix())
+
     outFile = Path(file.as_posix()[:-8] + '_crop_lzw.ome.tif')
-    command = 'set BF_MAX_MEM=12g & ' + 'bfconvert -bigtiff -overwrite -compression LZW -range 0 ' + str(cropPos-1) + ' ' + file.as_posix() + ' ' + outFile.as_posix() + ' & timeout 15'
+
+    bfconvert = 'set BF_MAX_MEM=12g & bfconvert -bigtiff -overwrite'
+    compression = '-compression LZW'
+    frames = '-range 0 ' + str(cropFrame-1)
+    if cropRect is None:
+        rect = ''
+    else:
+        rect = '-crop ' + ','.join([str(i) for i in cropRect])
+    files = file.as_posix() + ' ' + outFile.as_posix() + ' & timeout 15'
+
+    command = ' '.join([bfconvert, compression, frames, rect, files])
     print(command)
     os.system(command)
     print('adjusting metadata')
     with tifffile.TiffReader(outFile.as_posix()) as reader:
         mdInfo = xmltodict.parse(reader.ome_metadata)
-        mdInfo['OME']['Image']['Pixels']['Plane'] = mdInfo['OME']['Image']['Pixels']['Plane'][0:cropPos]
-        mdInfo['OME']['Image']['Pixels']['@SizeT'] = str(cropPos)
+        mdInfo['OME']['Image']['Pixels']['Plane'] = mdInfo['OME']['Image']['Pixels']['Plane'][0:cropFrame]
+        mdInfo['OME']['Image']['Pixels']['@SizeT'] = str(cropFrame)
         mdInfo = xmltodict.unparse(mdInfo).encode(encoding='UTF-8', errors='strict')
     tifffile.tifffile.tiffcomment(outFile.as_posix(), comment=mdInfo)
     print('transfered metadata')
@@ -409,22 +429,41 @@ def checkblackFrames(file):
     #    cropOMETiff(file, frame)
 
 
+def defineCropRect(file):
+    """ from a file get a rectangle that could be cropped to """
+    def on_select(evpress, evrelease):
+        pass
+
+    with tifffile.TiffFile(file) as tif:
+        image = tif.pages[0].asarray()
+        fig = plt.figure()
+        ax = plt.axes()
+        plt.imshow(image)
+    rectprops = dict(facecolor='red', edgecolor = 'black', alpha=0.2, fill=False)
+    rectHandle = RectangleSelector(ax, on_select, drawtype='box', useblit=False, button=[1],
+                        minspanx=5, minspany=5, spancoords='pixels', rectprops=rectprops,
+                        interactive=True, state_modifier_keys={'square': 'shift'})
+    plt.show()
+    rectProp = rectHandle._rect_bbox
+    rectProp = tuple(int(x) for x in rectProp)
+    print(rectProp)
+    return rectProp
+
 
 def main():
     """ Main method calculating a nn stack for a set of old Mito/drp stacks """
     allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/'
                          '180420_DRP_mito_Dora/**/*MMStack*.ome.tif', recursive=True)
-    files = [Path('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/180420_DRP_mito_Dora\sample1\sample1_cell_3_MMStack_Pos0_2.ome.tif'),
-             Path('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/180420_DRP_mito_Dora\sample1\sample1_cell_3_MMStack_Pos0_3.ome.tif')
+    files = [Path('W:/iSIMstorage/Users/Willi/180420_drp_mito_Dora/sample1/sample1_cell_3_MMStack_Pos0_2.ome.tif'),
              ]
-    cropPos = [2000,
+    cropFrame = [2000,
                2000
                ]
-               
-    
+
     for i in range(len(files)):
         print(files[i])
-        cropOMETiff(files[i], cropPos[i])
+        # cropOMETiff(files[i], cropFrame[i])
+        cropOMETiff(files[i], 2000, cropRect=True)
 
     # with tifffile.TiffFile(file) as tif:
         # mdInfo = xmltodict.parse(tif.ome_metadata)
