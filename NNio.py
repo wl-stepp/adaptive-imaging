@@ -366,16 +366,17 @@ def dataOrderMetadata(file, dataOrder=None):
             plt.show()
             answer = messagebox.askyesno(title='dataOrder', message='Is this a mito image?')
             dataOrder = 1 if answer else 0
-            print(dataOrder)
+        print(dataOrder)
 
-            try:
-                mdInfo['OME']['Image']['Description']['@dataOrder'] = dataOrder
-            except TypeError:
-                mdInfo['OME']['Image']['Description'] = {'@dataOrder': dataOrder}
-            mdInfo = xmltodict.unparse(mdInfo).encode(encoding='UTF-8', errors='strict')
-            tifffile.tifffile.tiffcomment(file, comment=mdInfo)
-        reader = tifffile.TiffReader(file)
-        print(xmltodict.parse(reader.ome_metadata)['OME']['Image']['Description'])
+    try:
+        mdInfo['OME']['Image']['Description']['@dataOrder'] = dataOrder
+    except TypeError:
+        mdInfo['OME']['Image']['Description'] = {'@dataOrder': dataOrder}
+    mdInfo = xmltodict.unparse(mdInfo).encode(encoding='UTF-8', errors='strict')
+    tifffile.tifffile.tiffcomment(file, comment=mdInfo)
+    reader = tifffile.TiffReader(file)
+    print(xmltodict.parse(reader.ome_metadata)['OME']['Image']['Description'])
+
     return dataOrder
 
 
@@ -453,17 +454,17 @@ def defineCropRect(file):
 def main():
     """ Main method calculating a nn stack for a set of old Mito/drp stacks """
     allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/'
-                         '180420_DRP_mito_Dora/**/*MMStack*.ome.tif', recursive=True)
+                         '180420_DRP_mito_Dora/**/*MMStack*lzw.ome.tif', recursive=True)
     files = [Path('W:/iSIMstorage/Users/Willi/180420_drp_mito_Dora/sample1/sample1_cell_3_MMStack_Pos0_2.ome.tif'),
              ]
     cropFrame = [2000,
                2000
                ]
 
-    for i in range(len(files)):
-        print(files[i])
+    for file in allFiles:
+        print(file)
         # cropOMETiff(files[i], cropFrame[i])
-        cropOMETiff(files[i], 2000, cropRect=True)
+        dataOrderMetadata(file)
 
     # with tifffile.TiffFile(file) as tif:
         # mdInfo = xmltodict.parse(tif.ome_metadata)
