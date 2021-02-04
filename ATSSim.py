@@ -157,7 +157,7 @@ for stack in stacks:
         drpPath = (newFolder + '/img_channel000_position000_time' +
                    str((outputFrame*2)).zfill(9) + '_z000.tif')
         drpPrepPath = (newFolder + '/img_channel000_position000_time' +
-                   str((outputFrame*2)).zfill(9) + '_z000.tif')
+                   str((outputFrame*2)).zfill(9) + '_z000_prep.tif')
         nnPath = (newFolder + '/img_channel000_position000_time' +
                   str((outputFrame*2 + 1)).zfill(9) + '_nn.tiff')
         io.imsave(mitoPath, MitoOrig[frame, :, :].astype(np.uint16),

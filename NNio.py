@@ -73,7 +73,7 @@ def loadElapsedTime(folder, progress=None, app=None):
         with tifffile.TiffFile(filePath) as tif:
             mdInfo = tif.imagej_metadata['Info']  # pylint: disable=E1136  # pylint/issues/3139
             if mdInfo is None:
-                mdInfo = tif.shaped_metadata[0]['Infos'] # pylint: disable=E1136
+                mdInfo = tif.shaped_metadata[0]['Infos']  # pylint: disable=E1136
             mdInfoDict = json.loads(mdInfo)
             elapsed.append(mdInfoDict['ElapsedTime-ms'])
         if app is not None:
@@ -299,7 +299,7 @@ def extractTiffStack(file, frame, target):
     elapsed = mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaT']*unitMultiplier
 
     ijInfoDict['ElapsedTime-ms'] = elapsed
-    ijInfo['Info'] = json.dumps(ijInfoDict)  # pylint: disable=E1136  # pylint/issues/3139
+    ijInfo['Info'] = json.dumps(ijInfoDict)  # pylint: disable=E1136,E1137  # pylint/issues/3139
 
     # Save the metadata for this page
     planeMD = mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]
@@ -331,9 +331,10 @@ def calculateNNforStack(file, model=None):
     # Prepare the Metadata for the new file by extracting the ome-metadata
     with tifffile.TiffFile(file, fastij=False) as tif:
         mdInfo = tif.ome_metadata.encode(encoding='UTF-8', errors='strict')
-        #extract only the planes that was written to
+        # extract only the planes that was written to
         mdInfoDict = xmltodict.parse(mdInfo)
-        mdInfoDict['OME']['Image']['Pixels']['Plane'] = mdInfoDict['OME']['Image']['Pixels']['Plane'][0::2]
+        mdInfoDict['OME']['Image']['Pixels']['Plane'] = \
+            mdInfoDict['OME']['Image']['Pixels']['Plane'][0::2]
         mdInfo = xmltodict.unparse(mdInfoDict).encode(encoding='UTF-8', errors='strict')
 
     # Get each frame and calculate the nn-output for it
@@ -361,7 +362,7 @@ def dataOrderMetadata(file, dataOrder=None):
             dataOrder = mdInfo['OME']['Image']['Description']['@dataOrder']
             print(file)
             print('dataOrder already there: ' + dataOrder)
-        except:
+        except (KeyError, TypeError) as _:
             plt.imshow(reader.pages[0].asarray())
             plt.show()
             answer = messagebox.askyesno(title='dataOrder', message='Is this a mito image?')
@@ -407,7 +408,8 @@ def cropOMETiff(file, cropFrame=None, cropRect=None):
     print('adjusting metadata')
     with tifffile.TiffReader(outFile.as_posix()) as reader:
         mdInfo = xmltodict.parse(reader.ome_metadata)
-        mdInfo['OME']['Image']['Pixels']['Plane'] = mdInfo['OME']['Image']['Pixels']['Plane'][0:cropFrame]
+        mdInfo['OME']['Image']['Pixels']['Plane'] = \
+            mdInfo['OME']['Image']['Pixels']['Plane'][0:cropFrame]
         mdInfo['OME']['Image']['Pixels']['@SizeT'] = str(cropFrame)
         mdInfo = xmltodict.unparse(mdInfo).encode(encoding='UTF-8', errors='strict')
     tifffile.tifffile.tiffcomment(outFile.as_posix(), comment=mdInfo)
@@ -423,27 +425,27 @@ def checkblackFrames(file):
     frame = stack.shape[0] - 1
     maxImage = 0
     while maxImage == 0:
-            maxImage = np.max(stack[frame])
-            frame = frame - 1
+        maxImage = np.max(stack[frame])
+        frame = frame - 1
     print('first frame with data: ' + str(frame+1) + '\n\n')
-    #if frame + 1 < stack.shape[0]:
+    # if frame + 1 < stack.shape[0]:
     #    cropOMETiff(file, frame)
 
 
 def defineCropRect(file):
     """ from a file get a rectangle that could be cropped to """
-    def on_select(evpress, evrelease):
+    def on_select(*_):
         pass
 
     with tifffile.TiffFile(file) as tif:
         image = tif.pages[0].asarray()
-        fig = plt.figure()
-        ax = plt.axes()
+        plt.figure()
+        axes = plt.axes()
         plt.imshow(image)
-    rectprops = dict(facecolor='red', edgecolor = 'black', alpha=0.2, fill=False)
-    rectHandle = RectangleSelector(ax, on_select, drawtype='box', useblit=False, button=[1],
-                        minspanx=5, minspany=5, spancoords='pixels', rectprops=rectprops,
-                        interactive=True, state_modifier_keys={'square': 'shift'})
+    rectprops = dict(facecolor='red', edgecolor='black', alpha=0.2, fill=False)
+    rectHandle = RectangleSelector(axes, on_select, drawtype='box', useblit=False, button=[1],
+                                   minspanx=5, minspany=5, spancoords='pixels', rectprops=rectprops,
+                                   interactive=True, state_modifier_keys={'square': 'shift'})
     plt.show()
     rectProp = rectHandle._rect_bbox
     rectProp = tuple(int(x) for x in rectProp)
@@ -455,11 +457,12 @@ def main():
     """ Main method calculating a nn stack for a set of old Mito/drp stacks """
     allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/'
                          '180420_DRP_mito_Dora/**/*MMStack*lzw.ome.tif', recursive=True)
-    files = [Path('W:/iSIMstorage/Users/Willi/180420_drp_mito_Dora/sample1/sample1_cell_3_MMStack_Pos0_2.ome.tif'),
+    files = [Path('W:/iSIMstorage/Users/Willi/180420_drp_mito_Dora/sample1/'
+                  'sample1_cell_3_MMStack_Pos0_2.ome.tif'),
              ]
     cropFrame = [2000,
-               2000
-               ]
+                 2000
+                 ]
 
     for file in allFiles:
         print(file)
@@ -517,7 +520,8 @@ def main():
     # print('Done')
 
 
-def printProgressBar(iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
+def printProgressBar(iteration, total, prefix='', suffix='', decimals=1,
+                     length=100, fill='█', printEnd="\r"):
     """
     Call in a loop to create terminal progress bar
     @params:
@@ -533,7 +537,7 @@ def printProgressBar(iteration, total, prefix = '', suffix = '', decimals = 1, l
     percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
     filledLength = int(length * iteration // total)
     bar = fill * filledLength + '-' * (length - filledLength)
-    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
+    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end=printEnd)
     # Print New Line on Complete
     if iteration == total:
         print()
