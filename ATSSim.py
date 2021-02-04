@@ -152,14 +152,24 @@ for stack in stacks:
 
         mitoPath = (newFolder + '/img_channel000_position000_time' +
                     str((outputFrame*2 + 1)).zfill(9) + '_z000.tif')
+        mitoPrepPath = (newFolder + '/img_channel000_position000_time' +
+                    str((outputFrame*2 + 1)).zfill(9) + '_z000_prep.tif')
         drpPath = (newFolder + '/img_channel000_position000_time' +
+                   str((outputFrame*2)).zfill(9) + '_z000.tif')
+        drpPrepPath = (newFolder + '/img_channel000_position000_time' +
                    str((outputFrame*2)).zfill(9) + '_z000.tif')
         nnPath = (newFolder + '/img_channel000_position000_time' +
                   str((outputFrame*2 + 1)).zfill(9) + '_nn.tiff')
         io.imsave(mitoPath, MitoOrig[frame, :, :].astype(np.uint16),
                   check_contrast=False, imagej=True,
                   ijmetadata={'Info': json.dumps({'ElapsedTime-ms': MitoTimes[frame]})})
+        io.imsave(mitoPrepPath, mitoDataFull.astype(np.uint8),
+                  check_contrast=False, imagej=True,
+                  ijmetadata={'Info': json.dumps({'ElapsedTime-ms': MitoTimes[frame]})})
         io.imsave(drpPath, DrpOrig[frame, :, :].astype(np.uint16),
+                  check_contrast=False, imagej=True,
+                  ijmetadata={'Info': json.dumps({'ElapsedTime-ms': DrpTimes[frame]})})
+        io.imsave(drpPath, drpDataFull.astype(np.uint8),
                   check_contrast=False, imagej=True,
                   ijmetadata={'Info': json.dumps({'ElapsedTime-ms': DrpTimes[frame]})})
         io.imsave(nnPath, outputDataFull.astype(np.uint8), check_contrast=False)
