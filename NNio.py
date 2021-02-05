@@ -373,8 +373,10 @@ def dataOrderMetadata(file, dataOrder=None):
 
     try:
         mdInfo['OME']['Image']['Description']['@dataOrder'] = dataOrder
+        print('dataOrder was already there overwritten')
     except TypeError:
         mdInfo['OME']['Image']['Description'] = {'@dataOrder': dataOrder}
+        print('Struct for dataOrder generated')
     mdInfo = xmltodict.unparse(mdInfo).encode(encoding='UTF-8', errors='strict')
     tifffile.tifffile.tiffcomment(file, comment=mdInfo)
     reader = tifffile.TiffReader(file)
@@ -403,7 +405,7 @@ def cropOMETiff(file, outFile=None, cropFrame=None, cropRect=None):
 
     if outFile is None:
         outFile = Path(file.as_posix()[:-8] + '_combine.ome.tif')
-
+    
     bfconvert = 'set BF_MAX_MEM=12g & bfconvert -bigtiff -overwrite'
     compression = '-compression LZW'
     if not cropFrame:
@@ -472,16 +474,14 @@ def main():
     """ Main method calculating a nn stack for a set of old Mito/drp stacks """
     allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/'
                          '180420_DRP_mito_Dora/**/*MMStack*lzw.ome.tif', recursive=True)
-    files = [Path('W:/iSIMstorage/Users/Willi/180420_drp_mito_Dora/sample1/'
-                  'sample1_cell_3_MMStack_Pos0_2.ome.tif'),
+    files = [Path('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/sample1/sample1_cell_1/sample2_cell_1_MMStack_Pos0.ome.tif'),
+             Path('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/sample1/sample1_cell_2/sample1_cell_2_MMStack_Pos0.ome.tif')
              ]
-    cropFrame = [2000,
-                 2000
-                 ]
 
-    for file in allFiles:
+    for file in files:
         print(file)
-        cropOMETiff(files[i], cropFrame[i])
+        outFile = Path('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/180420_drp_mito_Dora/sample1/' + file.name[0:-8] + '_combine.ome.tif')
+        cropOMETiff(file, outFile=outFile, cropFrame=False)
         dataOrderMetadata(file)
 
     # with tifffile.TiffFile(file) as tif:

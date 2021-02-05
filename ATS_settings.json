@@ -18,5 +18,5 @@
     "lowerThreshold": 70,
     "upperThreshold": 90,
     "slowRate": 5,
-    "minFastFrames": 5
+    "minFastFrames": 4
 }
