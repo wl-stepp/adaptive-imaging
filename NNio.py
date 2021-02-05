@@ -64,12 +64,12 @@ def loadElapsedTime(folder, progress=None, app=None):
     #             elapsed.append(
     #                 tif.pages[frame].tags['MicroManagerMetadata'].value['ElapsedTime-ms'])
     # else:
-    fileList = glob.glob(folder + '/img_*.tif')
+    fileList = glob.glob(folder + '/img_*[0-9].tif')
     numFrames = int(len(fileList)/2)
     if progress is not None:
         progress.setRange(0, numFrames*2)
     i = 0
-    for filePath in glob.glob(folder + '/img_*.tif'):
+    for filePath in fileList:
         with tifffile.TiffFile(filePath) as tif:
             mdInfo = tif.imagej_metadata['Info']  # pylint: disable=E1136  # pylint/issues/3139
             if mdInfo is None:
@@ -100,7 +100,6 @@ def resaveNN(folder):
         img = tifffile.imread(filePath)
         newFile = filePath[:-5] + '_fiji.tiff'
         tifffile.imsave(newFile, img.astype(np.uint8))
-        print(filePath)
 
 
 def loadTifFolder(folder, resizeParam=1, order=0, progress=None, cropSquare=True) -> np.ndarray:
@@ -193,7 +192,7 @@ def cropToSquare(stack):
     return stack
 
 
-def loadTifStack(stack, order=0, outputElapsed=False, cropSquare=True):
+def loadTifStack(stack, order=None, outputElapsed=False, cropSquare=True):
     """ Load a tif stack and deinterleave depending on the order (0 or 1). Also get the
     elapsed time on the images and give them back as list."""
     imageMitoOrig = io.imread(stack)
@@ -201,14 +200,15 @@ def loadTifStack(stack, order=0, outputElapsed=False, cropSquare=True):
     print(imageMitoOrig.shape)
     with tifffile.TiffFile(stack, fastij=False) as tif:
         # try to get dataOrder from file
-        mdInfo = tif.ome_metadata  # pylint: disable=E1136  # pylint/issues/3139
-        # This should work for single series ome.tifs
-        mdInfoDict = xmltodict.parse(mdInfo)
-        try:
-            order = int(mdInfoDict['OME']['Image']['Description']['@dataOrder'])
-            print('order parameter was read from file: ', order)
-        except KeyError:
-            print('dataOrder not found in file using ', order)
+        if order is None:
+            mdInfo = tif.ome_metadata  # pylint: disable=E1136  # pylint/issues/3139
+            # This should work for single series ome.tifs
+            mdInfoDict = xmltodict.parse(mdInfo)
+            try:
+                order = int(mdInfoDict['OME']['Image']['Description']['@dataOrder'])
+                print('order parameter was read from file: ', order)
+            except KeyError:
+                print('dataOrder not found in file using ', order)
 
         start1 = order
         start2 = np.abs(order-1)
@@ -224,17 +224,19 @@ def loadTifStack(stack, order=0, outputElapsed=False, cropSquare=True):
 
         # This could be done also more flexible with a matrix or dict
 
-        elapsed = []
-        # get elapsed from tif file
-        for frame in range(0, imageMitoOrig.shape[0]*channels):
-            # Check which unit the DeltaT is
-            if mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaTUnit'] == 's':
-                unitMultiplier = 1000
-            else:
-                unitMultiplier = 1
-            elapsed.append(unitMultiplier*float(
-                mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaT']))
-
+        # get elapsed from tif file or just put the frames
+        if 'mdInfoDict' in locals():
+            elapsed = []
+            for frame in range(0, imageMitoOrig.shape[0]*channels):
+                # Check which unit the DeltaT is
+                if mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaTUnit'] == 's':
+                    unitMultiplier = 1000
+                else:
+                    unitMultiplier = 1
+                elapsed.append(unitMultiplier*float(
+                    mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaT']))
+        else:
+            elapsed = range(0, imageMitoOrig.shape[0]*channels)
     elapsed1 = elapsed[start1::2]
     elapsed2 = elapsed[start2::2]
 
@@ -381,27 +383,40 @@ def dataOrderMetadata(file, dataOrder=None):
     return dataOrder
 
 
-def cropOMETiff(file, cropFrame=None, cropRect=None):
-    """ Crop a tif while conserving the metadata """
+def cropOMETiff(file, outFile=None, cropFrame=None, cropRect=None):
+    """ Crop a tif while conserving the metadata. Micromanager seems to save data in a rather weird
+    format if it is supposed to save them to stacks. It limits the file size to ~4GB and splits the
+    series up into several files _1, _2, _3 etc. The OME metadata is however written to the first
+    file with TiffData tags that link to the other files for higher frames. This leads to a
+    different behavior if loaded in imagej via drag or via bio-formats import. For a drag, only
+    the frames that are in that actual file will be loaded, while for an import, all frames will be
+    loaded also from the other files. This function makes one file that has all the frames with the
+    correct metadata."""
     if cropFrame is None:
         cropFrame = checkblackFrames(file.as_posix()) - 6
         cropFrame = cropFrame if cropFrame % 2 else cropFrame - 1
+
 
     if cropRect is True:
         # Ask for where the file should be cropped
         cropRect = defineCropRect(file.as_posix())
 
-    outFile = Path(file.as_posix()[:-8] + '_crop_lzw.ome.tif')
+    if outFile is None:
+        outFile = Path(file.as_posix()[:-8] + '_combine.ome.tif')
 
     bfconvert = 'set BF_MAX_MEM=12g & bfconvert -bigtiff -overwrite'
     compression = '-compression LZW'
-    frames = '-range 0 ' + str(cropFrame-1)
+    if not cropFrame:
+        frames = ''
+    else:
+        frames = '-range 0 ' + str(cropFrame-1)
+
     if cropRect is None:
         rect = ''
     else:
         rect = '-crop ' + ','.join([str(i) for i in cropRect])
-    files = file.as_posix() + ' ' + outFile.as_posix() + ' & timeout 15'
 
+    files = file.as_posix() + ' ' + outFile.as_posix() + ' & timeout 15'
     command = ' '.join([bfconvert, compression, frames, rect, files])
     print(command)
     os.system(command)
@@ -414,7 +429,7 @@ def cropOMETiff(file, cropFrame=None, cropRect=None):
         mdInfo = xmltodict.unparse(mdInfo).encode(encoding='UTF-8', errors='strict')
     tifffile.tifffile.tiffcomment(outFile.as_posix(), comment=mdInfo)
     print('transfered metadata')
-
+    return outFile
 
 def checkblackFrames(file):
     """ Test if there are black frames at the end of a tiff file """
@@ -466,7 +481,7 @@ def main():
 
     for file in allFiles:
         print(file)
-        # cropOMETiff(files[i], cropFrame[i])
+        cropOMETiff(files[i], cropFrame[i])
         dataOrderMetadata(file)
 
     # with tifffile.TiffFile(file) as tif:

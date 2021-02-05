@@ -11,13 +11,16 @@ Created on Mon Oct  5 12:18:48 2020
 
 @author: stepp
 """
+import glob
 import json
 import os
 import re
 import sys
+import time
 
 import numpy as np
 import pyqtgraph as pg
+import tifffile
 from PyQt5.QtCore import QObject, Qt, QThread, QTimer, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import (QApplication, QFileDialog, QGridLayout, QGroupBox,
                              QLabel, QPlainTextEdit, QProgressBar, QPushButton,
@@ -55,6 +58,7 @@ class NNGui(QWidget):
         # Handle to the image stack tiffcapture object.
         self._tiffCaptureHandle = None
         self.currentFrameIndex = None
+        self.testfile = 'C:/Users/stepp/Documents/02_Raw/SmartMito/sample1_cell_3_MMStack_Pos0_2_crop_lzw.ome_ATS/img_channel000_position000_time000000000_z000.tif'
 
         # Image frame viewer.
         self.viewerOrig = QtImageViewerMerge()
@@ -96,6 +100,8 @@ class NNGui(QWidget):
         self.orderButton = QPushButton("order: Drp first")
         self.hideOrig = QPushButton('Orig')
         self.hideOrig.setCheckable(True)
+        self.setVirtual = QPushButton('virtual Stack')
+        self.setVirtual.setCheckable(True)
         self.hideNN = QPushButton('NN')
         self.hideNN.setCheckable(True)
         self.currentFrameLabel = QLabel('Frame')
@@ -115,6 +121,7 @@ class NNGui(QWidget):
         self.dataButton.clicked.connect(self.loadDataThread)
         self.orderButton.clicked.connect(self.orderChange)
         self.hideOrig.clicked.connect(self.hideViewerOrig)
+        self.setVirtual.clicked.connect(self.setVirtualCallback)
         self.hideNN.clicked.connect(self.hideViewerNN)
         self.prevFrameButton.clicked.connect(self.prevFrame)
         self.nextFrameButton.clicked.connect(self.nextFrame)
@@ -139,6 +146,7 @@ class NNGui(QWidget):
         gridBox.addWidget(self.dataButton, 0, 1)
         gridBox.addWidget(self.orderButton, 0, 2)
         gridBox.addWidget(self.hideOrig, 1, 0)
+        gridBox.addWidget(self.setVirtual, 1, 1)
         gridBox.addWidget(self.hideNN, 1, 2)
         gridBox.addWidget(self.loadingStatusLabel, 2, 0, 1, 3)
         gridBox.addWidget(self.progress, 3, 0, 1, 3)
@@ -155,6 +163,7 @@ class NNGui(QWidget):
         self.frameSlider.sliderReleased.connect(self.stopTimer)
 
         # init variables
+        self.fileList = [None]*3
         self.mode = None
         self.model = None
         self.imageDrpOrig = None
@@ -165,7 +174,8 @@ class NNGui(QWidget):
         self.maxPos = None
         self.nnRecalculated = None
         self.settings = None
-        self.folder = 'C:/Users/stepp/Documents/02_Raw/SmartMito/'
+        self.folder = 'C:/Users/stepp/Documents/02_Raw/SmartMito'
+        self.virtualStack = False
 
         self.app = app
         self.order = 1
@@ -193,13 +203,11 @@ class NNGui(QWidget):
         self.mitoDataFull = data.mitoDataFull
         self.drpDataFull = data.drpDataFull
         self.folder = data.startFolder
+        self.virtualFolder = data.folder
         self.nnOutput = data.nnOutput
         self.maxPos = data.maxPos
-        self.frameSlider.setMaximum(self.nnOutput.shape[0]-1)
-        self.refreshGradients()
-        self.viewerOrig.resetRanges()
-        self.viewerProc.resetRanges()
-        self.viewerNN.resetRanges()
+        self.frameSlider.setMaximum(data.frameNum-1)
+        # self.refreshGradients()
         self.loadingStatusLabel.setText('Done')
         self.viewerProc.viewBox.setRange(xRange=(0, data.postSize), yRange=(0, data.postSize))
 
@@ -210,7 +218,6 @@ class NNGui(QWidget):
             self.outputPlot.scatter.setData(range(0, len(data.outputData)), data.outputData)
         else:
             self.loadingStatusLabel.setText('Getting the timing data')
-            print(self.folder)
             self.outputPlot.loadData(data.folder, self.progress, self.app)
             for i in range(-1, 6):
                 self.outputPlot.inc = i
@@ -223,6 +230,11 @@ class NNGui(QWidget):
             self.outputPlot.thrLine1.setPos(self.settings['lowerThreshold'])
             self.outputPlot.thrLine2.setPos(self.settings['upperThreshold'])
 
+        self.onTimer(0)
+        if not self.virtualStack:
+            self.viewerOrig.resetRanges()
+        self.viewerProc.resetRanges()
+        self.viewerNN.resetRanges()
         self.onTimer()
         # set up the progress bar
         self.frameSlider.setDisabled(False)
@@ -233,7 +245,7 @@ class NNGui(QWidget):
 
     def loadDataThread(self):
         """ Create and start the thread to load data """
-        worker = LoadingThread(self.folder, self.order, self.model)
+        worker = LoadingThread(self.folder, self.order, self.model, self.virtualStack)
         thread = QThread()
         thread.setObjectName('Data Loader')
         self.threads.append((thread, worker))
@@ -273,6 +285,17 @@ class NNGui(QWidget):
         else:
             self.viewerNN.hide()
 
+    def setVirtualCallback(self):
+        """ React to a press of the virtual Stack button """
+        if self.virtualStack:
+            self.virtualStack = False
+            self.viewerOrig.show()
+            self.hideOrig.setChecked(False)
+        else:
+            self.virtualStack = True
+            self.viewerOrig.hide()
+            self.hideOrig.setChecked(True)
+
     def orderChange(self):
         """ React to a press of the order button to read interleaved data into the right order """
         if self.order == 0:
@@ -284,15 +307,25 @@ class NNGui(QWidget):
         self.setLogString('Set ' + orderStr)
         self.orderButton.setText(orderStr)
 
-    def onTimer(self):
+    def onTimer(self, i=None):
         """ Reset the data in the GUI on the timer when button or slider is pressed """
-        i = self.frameSlider.value()
-        self.viewerOrig.setImage(self.imageMitoOrig[i], 1)
-        self.viewerOrig.setImage(self.imageDrpOrig[i], 0)
-        self.viewerProc.setImage(self.mitoDataFull[i], 1)
-        self.viewerProc.setImage(self.drpDataFull[i], 0)
-        self.viewerNN.setImage(self.nnOutput[i], 0)
-        self.currentFrameLabel.setText(str(i))
+        if i is None:
+            i = self.frameSlider.value()
+
+        if self.virtualStack is True:
+            self.getFileNames(i)
+            images = tifffile.imread(self.fileList)
+            self.viewerProc.setImage(images[0], 1)
+            self.viewerProc.setImage(images[1], 0)
+            self.viewerNN.setImage(images[2], 0)
+        else:
+            self.viewerOrig.setImage(self.imageMitoOrig[i], 1)
+            self.viewerOrig.setImage(self.imageDrpOrig[i], 0)
+            self.viewerProc.setImage(self.mitoDataFull[i], 1)
+            self.viewerProc.setImage(self.drpDataFull[i], 0)
+            self.viewerNN.setImage(self.nnOutput[i], 0)
+            self.currentFrameLabel.setText(str(i))
+
         if self.mode == 'stack':
             self.frameLine.setValue(i)
         else:
@@ -300,6 +333,12 @@ class NNGui(QWidget):
         self.viewerOrig.cross.setPosition([self.maxPos[i][0]])
         self.viewerProc.cross.setPosition([self.maxPos[i][0]])
         self.viewerNN.cross.setPosition([self.maxPos[i][0]])
+
+    def getFileNames(self, frame):
+        baseName = '/img_channel000_position000_time'
+        self.fileList[self.order] = self.virtualFolder + baseName + str((frame*2 + 1)).zfill(9) + '_z000_prep.tif'
+        self.fileList[np.abs(self.order - 1)] = self.virtualFolder + baseName + str((frame*2)).zfill(9) + '_z000_prep.tif'
+        self.fileList[2] = self.virtualFolder + baseName + str((frame*2 + 1)).zfill(9) + '_nn.tiff'
 
     def startTimer(self):
         """ start Timer when slider is pressed """
@@ -309,13 +348,13 @@ class NNGui(QWidget):
         """ stop timer when slider is released"""
         self.timer.stop()
 
-    def refreshGradients(self):
-        """ refresh the images when a LUT was changed in the popup window """
-        self.viewerOrig.setImage(self.imageMitoOrig[0], 1)
-        self.viewerOrig.setImage(self.imageDrpOrig[0], 0)
-        self.viewerProc.setImage(self.mitoDataFull[0], 1)
-        self.viewerProc.setImage(self.drpDataFull[0], 0)
-        self.viewerNN.setImage(self.nnOutput[0], 0)
+    # def refreshGradients(self):
+    #     """ refresh the images when a LUT was changed in the popup window """
+    #     self.viewerOrig.setImage(self.imageMitoOrig[0], 1)
+    #     self.viewerOrig.setImage(self.imageDrpOrig[0], 0)
+    #     self.viewerProc.setImage(self.mitoDataFull[0], 1)
+    #     self.viewerProc.setImage(self.drpDataFull[0], 0)
+    #     self.viewerNN.setImage(self.nnOutput[0], 0)
 
     def nextFrame(self):
         """ display next frame in all viewBoxes when '>' button is pressed """
@@ -343,11 +382,12 @@ class LoadingThread(QObject):
     setLog = pyqtSignal(str)
     updateProgressRange = pyqtSignal(int)
 
-    def __init__(self, startFolder, dataOrder, kerasModel):
+    def __init__(self, startFolder, dataOrder, kerasModel, virtualStack):
         super().__init__()
         self.startFolder = startFolder
         self.dataOrder = dataOrder
         self.model = kerasModel
+        self.virtualStack = virtualStack
         self.mode = None
         self.imageDrpOrig = None
         self.imageMitoOrig = None
@@ -378,7 +418,14 @@ class LoadingThread(QObject):
         order 0 is mito first"""
         fname = QFileDialog.getOpenFileName(QWidget(), 'Open file', self.startFolder)
         self.setLabel.emit('Loading images from files into arrays')
-        if not re.match(r'img_channel\d+_position\d+_time', os.path.basename(fname[0])) is None:
+        if self.virtualStack:
+            self.setLog.emit("Virtual stack mode")
+            self.folder = os.path.dirname(fname[0])
+            self.startFolder = os.path.dirname(os.path.dirname(fname[0]))
+            self.mode = 'virtual'
+            if os.path.exists(self.folder + '/ATSSim_settings.json'):
+                self.settings = self.folder + '/ATSSim_settings.json'
+        elif not re.match(r'img_channel\d+_position\d+_time', os.path.basename(fname[0])) is None:
             # Check for microManager file like name and if so load as files in folder
             self.setLog.emit("Folder mode")
             self.mode = 'folder'
@@ -400,16 +447,32 @@ class LoadingThread(QObject):
             # Save this to go back to when the user wants to load another file
             self.startFolder = os.path.dirname(fname[0])
             self.setLog.emit(fname[0])
-        self.updateProgressRange.emit(self.imageDrpOrig.shape[0])
+        # self.updateProgressRange.emit(self.imageDrpOrig.shape[0])
         self.setLog.emit('Data order: ' + str(self.dataOrder))
 
     def _loadData(self):
         """load tif stack or ATS folder into the GUI. Reports progress using a textbox and the
         progress bar.
         """
+        self.outputData = []
+
+        # Make shortcut if using virtual stack
+        if self.mode == 'virtual':
+            allFiles = sorted(glob.glob(self.folder + '/img_channel*_nn.tiff'))
+            splitStr = re.split(r'img_channel\d+_position\d+_time',
+                                allFiles[-1])
+            splitStr = re.split(r'_nn+', splitStr[1])
+            self.frameNum = int((int(splitStr[0])-1)/2)
+            for frame in range(0, self.frameNum):
+                nnOutput = tifffile.imread(allFiles[frame])
+                self.outputData.append(np.max(nnOutput))
+                self.maxPos.append(list(zip(
+                    *np.where(nnOutput == self.outputData[-1]))))
+                self.postSize = nnOutput.shape[1]
+            return self
+
 
         self.change_progress.emit(0)
-
         self.setLog.emit('input shape {}'.format(self.imageMitoOrig.shape))
         # Initialize values and data for neural network
         self.frameNum = self.imageMitoOrig.shape[0]
@@ -418,7 +481,6 @@ class LoadingThread(QObject):
             self.nnOutput = np.zeros((self.frameNum, self.postSize, self.postSize))
         self.mitoDataFull = np.zeros_like(self.nnOutput)
         self.drpDataFull = np.zeros_like(self.nnOutput)
-        self.outputData = []
         self.nnRecalculated = np.zeros(self.frameNum)
 
         # Process data for all frames that where found
