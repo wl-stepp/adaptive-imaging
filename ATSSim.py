@@ -21,7 +21,7 @@ from skimage import io
 from tensorflow import keras
 
 from NNfeeder import prepareNNImages
-from NNio import loadTifStack
+from NNio import loadTifStack, dataOrderMetadata
 
 #
 #                          USER SETTINGS
@@ -35,7 +35,7 @@ from NNio import loadTifStack
 
 
 # Comment if only taking one stack
-allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/180420_drp_mito_Dora/**/*MMStack*_crop.ome.tif', recursive=True)
+allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/180420_drp_mito_Dora/**/*MMStack*_combine.ome.tif', recursive=True)
 
 # Just take the files that have not been analysed so far
 stacks = []
@@ -45,6 +45,7 @@ for file in allFiles:
     # if not os.path.isfile(nnFile):
     if not os.path.isdir(atsFolder):
         stacks.append(file)
+        
 print('\n'.join(stacks))
 
 # stacks = ['C:/Users/stepp/Desktop/sample1_cell_2_mmstack_pos0_1.ome.tif']
@@ -101,9 +102,9 @@ for stack in stacks:
     file.close()
     file = open(txtFile, 'a')
 
-    DrpOrig, MitoOrig, DrpTimes, MitoTimes = loadTifStack(stack, dataOrder, outputElapsed=True)
+    #dataOrder = dataOrderMetadata(stack)
+    DrpOrig, MitoOrig, DrpTimes, MitoTimes = loadTifStack(stack, outputElapsed=True)
     print('stack loaded')
-
     # fig = plt.figure()
     # fig.suptitle('This should be Drp')
     # plt.imshow(DrpOrig[1])
@@ -169,7 +170,7 @@ for stack in stacks:
         io.imsave(drpPath, DrpOrig[frame, :, :].astype(np.uint16),
                   check_contrast=False, imagej=True,
                   ijmetadata={'Info': json.dumps({'ElapsedTime-ms': DrpTimes[frame]})})
-        io.imsave(drpPath, drpDataFull.astype(np.uint8),
+        io.imsave(drpPrepPath, drpDataFull.astype(np.uint8),
                   check_contrast=False, imagej=True,
                   ijmetadata={'Info': json.dumps({'ElapsedTime-ms': DrpTimes[frame]})})
         io.imsave(nnPath, outputDataFull.astype(np.uint8), check_contrast=False)
