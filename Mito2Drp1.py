@@ -42,7 +42,7 @@ def image_stack_blur(image_stack, sigma_x, sigma_y):
 # Import data
 # Changed from the Colab version to load local data
 
-data_path = 'E:/Watchdog/SmartMito/'  # nb: begin with /
+data_path = 'W:/Watchdog/Model/'  # nb: begin with /
 print('data_path : ', data_path)
 print()
 input_data_filename1 = data_path + 'Mito.h5'  # Mito
@@ -146,7 +146,7 @@ nb_filters = 8
 firstConvSize = 9
 
 
-input_shape = (128, 128, 2, 1)
+input_shape = (None, None, 2, 1) # was (128, 128, 2, 1)
 inputs = Input(shape=input_shape)
 
 # encoder section
@@ -161,8 +161,8 @@ down0 = Conv3D(
 down0 = BatchNormalization()(down0)
 down0 = Activation('relu')(down0)
 down0_pool = MaxPooling3D((2, 2, 2), strides=(2, 2, 2))(down0)
-down0_pool = Reshape((64, 64, nb_filters))(down0_pool)
-down0 = Reshape((128, 128, nb_filters*2))(down0)
+# down0_pool = Reshape((None, None, nb_filters))(down0_pool)  # was 64, 64
+# down0 = Reshape((None, None, nb_filters*2))(down0)          # was 128, 128
 
 down1 = Conv2D(nb_filters*2, (3, 3), padding='same')(down0_pool)
 down1 = BatchNormalization()(down1)
@@ -294,6 +294,7 @@ print('Loss - ' + loss + ': %0.3f' % loss_metric)
 # Save the compiled model to be used later
 print('* Save the Model for later use *')
 model_path = data_path + 'test_model'
+model.save(model_path + '.h5')
 tf.keras.models.save_model(model, model_path)
 
 print('* Predicting the output of a given input from test set *')

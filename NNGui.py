@@ -16,7 +16,6 @@ import json
 import os
 import re
 import sys
-import time
 
 import numpy as np
 import pyqtgraph as pg
@@ -58,7 +57,9 @@ class NNGui(QWidget):
         # Handle to the image stack tiffcapture object.
         self._tiffCaptureHandle = None
         self.currentFrameIndex = None
-        self.testfile = 'C:/Users/stepp/Documents/02_Raw/SmartMito/sample1_cell_3_MMStack_Pos0_2_crop_lzw.ome_ATS/img_channel000_position000_time000000000_z000.tif'
+        self.testfile = ('C:/Users/stepp/Documents/02_Raw/SmartMito/'
+                         'sample1_cell_3_MMStack_Pos0_2_crop_lzw.ome_ATS/'
+                         'img_channel000_position000_time000000000_z000.tif')
 
         # Image frame viewer.
         self.viewerOrig = QtImageViewerMerge()
@@ -175,6 +176,7 @@ class NNGui(QWidget):
         self.nnRecalculated = None
         self.settings = None
         self.folder = 'C:/Users/stepp/Documents/02_Raw/SmartMito'
+        self.virtualFolder = None
         self.virtualStack = False
 
         self.app = app
@@ -335,9 +337,12 @@ class NNGui(QWidget):
         self.viewerNN.cross.setPosition([self.maxPos[i][0]])
 
     def getFileNames(self, frame):
+        """ Get the filenames for display of a specific frame in virtual stack mode """
         baseName = '/img_channel000_position000_time'
-        self.fileList[self.order] = self.virtualFolder + baseName + str((frame*2 + 1)).zfill(9) + '_z000_prep.tif'
-        self.fileList[np.abs(self.order - 1)] = self.virtualFolder + baseName + str((frame*2)).zfill(9) + '_z000_prep.tif'
+        self.fileList[self.order] = (self.virtualFolder + baseName +
+                                     str((frame*2 + 1)).zfill(9) + '_z000_prep.tif')
+        self.fileList[np.abs(self.order - 1)] = (self.virtualFolder + baseName +
+                                                 str((frame*2)).zfill(9) + '_z000_prep.tif')
         self.fileList[2] = self.virtualFolder + baseName + str((frame*2 + 1)).zfill(9) + '_nn.tiff'
 
     def startTimer(self):
@@ -471,7 +476,6 @@ class LoadingThread(QObject):
                 self.postSize = nnOutput.shape[1]
             return self
 
-
         self.change_progress.emit(0)
         self.setLog.emit('input shape {}'.format(self.imageMitoOrig.shape))
         # Initialize values and data for neural network
@@ -492,6 +496,7 @@ class LoadingThread(QObject):
                 self.imageDrpOrig[frame, :, :], self.nnImageSize)
 
             # Do the NN calculation if there is not already a file there
+            outputPredict = None
             if self.mode == 'folder' and np.max(self.nnOutput[frame]) > 0:
                 nnDataPres = 1
             else:

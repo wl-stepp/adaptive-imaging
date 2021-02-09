@@ -10,12 +10,11 @@ import os
 import re
 from pathlib import Path
 from tkinter import messagebox
-import time
-import psutil
 
 import imageio
 import matplotlib.pyplot as plt
 import numpy as np
+import psutil
 import tifffile
 import xmltodict
 from matplotlib.widgets import RectangleSelector
@@ -227,8 +226,9 @@ def loadTifStack(stack, order=None, outputElapsed=False, cropSquare=True):
         # This could be done also more flexible with a matrix or dict
 
         # get elapsed from tif file or just put the frames
-        if 'mdInfoDict' in locals():
-            elapsed = []
+        elapsed = []
+        try:
+            mdInfoDict = xmltodict.parse(tif.ome_metadata)
             for frame in range(0, imageMitoOrig.shape[0]*channels):
                 # Check which unit the DeltaT is
                 if mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaTUnit'] == 's':
@@ -237,8 +237,10 @@ def loadTifStack(stack, order=None, outputElapsed=False, cropSquare=True):
                     unitMultiplier = 1
                 elapsed.append(unitMultiplier*float(
                     mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaT']))
-        else:
+        except TypeError:
+            print('No timing metadata just writing frames')
             elapsed = range(0, imageMitoOrig.shape[0]*channels)
+
     elapsed1 = elapsed[start1::2]
     elapsed2 = elapsed[start2::2]
 
@@ -326,11 +328,9 @@ def calculateNNforStack(file, model=None):
         modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/model_Dora.h5'
         model = keras.models.load_model(modelPath, compile=True)
 
-    # DrpOrig, MitoOrig, elapsed, _ = loadTifStack(file, dataOrder,  outputElapsed=True)
+    # drpOrig, mitoOrig, elapsed, _ = loadTifStack(file, dataOrder,  outputElapsed=True)
 
     nnPath = file[:-8] + '_nn.ome.tif'
-
-    
 
     # Prepare the Metadata for the new file by extracting the ome-metadata
     with tifffile.TiffFile(file, fastij=False) as tif:
@@ -343,20 +343,19 @@ def calculateNNforStack(file, model=None):
         print('Data order:', dataOrder)
         mdInfo = xmltodict.unparse(mdInfoDict).encode(encoding='UTF-8', errors='strict')
 
-    DrpOrig, MitoOrig = loadTifStack(file, dataOrder, cropSquare=True)
-        
-    # Get each frame and calculate the nn-output for it
-    for frame in range(DrpOrig.shape[0]):
-        t0 = time.perf_counter()
-        printProgressBar(frame, DrpOrig.shape[0], printEnd='\n')
-        inputData, positions = NNfeeder.prepareNNImages(MitoOrig[frame, :, :],
-                                                        DrpOrig[frame, :, :], 128)
-        outputPredict = model.predict_on_batch(inputData)
-        if frame == 0:
-            nnSize = positions['px'][-1][-1]
-            nnImage = np.zeros((int(DrpOrig.shape[0]), nnSize, nnSize), dtype=np.uint8)
-        nnImage[frame, :, :] = ImageTiles.stitchImage(outputPredict, positions)
+    drpOrig, mitoOrig = loadTifStack(file, dataOrder, cropSquare=True)
 
+    # Get each frame and calculate the nn-output for it
+    inputData, positions = NNfeeder.prepareNNImages(mitoOrig[0, :, :],
+                                                    drpOrig[0, :, :], 128)
+    nnSize = positions['px'][-1][-1]
+    nnImage = np.zeros((int(drpOrig.shape[0]), nnSize, nnSize), dtype=np.uint8)
+    for frame in range(drpOrig.shape[0]):
+        printProgressBar(frame, drpOrig.shape[0], printEnd='\n')
+        inputData, positions = NNfeeder.prepareNNImages(mitoOrig[frame, :, :],
+                                                        drpOrig[frame, :, :], 128)
+        outputPredict = model.predict_on_batch(inputData)
+        nnImage[frame, :, :] = ImageTiles.stitchImage(outputPredict, positions)
 
     # Write the whole stack to a tif file with description
     tifffile.imwrite(nnPath, nnImage, description=mdInfo)
@@ -365,9 +364,11 @@ def calculateNNforStack(file, model=None):
 def dataOrderMetadata(file, dataOrder=None):
     """ Add a Tag to the tif that states with dataOrder it has """
     reader = tifffile.TiffReader(file)
+    writeMetadata = False
+    mdInfo = None
     if dataOrder is None:
-        mdInfo = xmltodict.parse(reader.ome_metadata)
         try:
+            mdInfo = xmltodict.parse(reader.ome_metadata)
             dataOrder = mdInfo['OME']['Image']['Description']['@dataOrder']
             print(file)
             print('dataOrder already there: ' + dataOrder)
@@ -382,11 +383,17 @@ def dataOrderMetadata(file, dataOrder=None):
 
     if writeMetadata:
         try:
+            mdInfo = xmltodict.parse(reader.ome_metadata)
             mdInfo['OME']['Image']['Description']['@dataOrder'] = dataOrder
             print('dataOrder was already there overwritten')
         except TypeError:
-            mdInfo['OME']['Image']['Description'] = {'@dataOrder': dataOrder}
-            print('Struct for dataOrder generated')
+            try:
+                mdInfo['OME']['Image']['Description'] = {'@dataOrder': dataOrder}
+                print('Struct for dataOrder generated')
+            except UnboundLocalError:
+                mdInfo = ''
+                print('No OME metadata in this file')
+                return int(dataOrder)
         mdInfo = xmltodict.unparse(mdInfo).encode(encoding='UTF-8', errors='strict')
         tifffile.tifffile.tiffcomment(file, comment=mdInfo)
         reader = tifffile.TiffReader(file)
@@ -410,14 +417,13 @@ def cropOMETiff(file, outFile=None, cropFrame=None, cropRect=None):
         cropFrame = False if cropFrame > fullLength - 5 else cropFrame
         print('crop at Frame:', str(cropFrame))
 
-
     if cropRect is True:
         # Ask for where the file should be cropped
         cropRect = defineCropRect(file.as_posix())
 
     if outFile is None:
         outFile = Path(file.as_posix()[:-8] + '_combine.ome.tif')
-    
+
     bfconvert = 'set BF_MAX_MEM=12g & bfconvert -bigtiff -overwrite'
     compression = '-compression LZW'
     if not cropFrame:
@@ -434,7 +440,7 @@ def cropOMETiff(file, outFile=None, cropFrame=None, cropRect=None):
     command = ' '.join([bfconvert, compression, frames, rect, files])
     print(command)
     os.system(command)
-        
+
     if cropFrame:
         print('adjusting metadata')
         with tifffile.TiffReader(outFile.as_posix()) as reader:
@@ -447,9 +453,10 @@ def cropOMETiff(file, outFile=None, cropFrame=None, cropRect=None):
         print('transfered metadata')
     return outFile
 
+
 def checkblackFrames(file):
     """ Test if there are black frames at the end of a tiff file """
-    with open(os.devnull, "w") as f, contextlib.redirect_stderr(f):
+    with open(os.devnull, "w") as fileHandle, contextlib.redirect_stderr(fileHandle):
         stack = io.imread(file)
     print(stack.shape)
     print(len(tifffile.TiffFile(file).pages))
@@ -462,7 +469,6 @@ def checkblackFrames(file):
     # if frame + 1 < stack.shape[0]:
     #    cropOMETiff(file, frame)
     return frame, stack.shape[0]
-
 
 
 def defineCropRect(file):
@@ -490,21 +496,23 @@ def main():
     """ Main method calculating a nn stack for a set of old Mito/drp stacks """
     allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/'
                          '180420_DRP_mito_Dora/**/*MMStack*lzw.ome.tif', recursive=True)
+    mainPath = '//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh'
     files = [
-             Path('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/sample2/sample2_cell_1/sample1_cell_1_MMStack_Pos0.ome.tif'),
-             Path('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/sample2/sample2_cell_2/sample1_cell_2_MMStack_Pos0.ome.tif'),
-             Path('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/sample2/sample2_cell_3/sample1_cell_3_MMStack_Pos0.ome.tif'),
-             Path('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/sample2/sample2_cell_4/sample1_cell_4_MMStack_Pos0.ome.tif'),
-             Path('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/sample2/sample2_cell_5/sample1_cell_5_MMStack_Pos0.ome.tif')
+             Path(mainPath + '/sample2/sample2_cell_1/sample1_cell_1_MMStack_Pos0.ome.tif'),
+             Path(mainPath + '/sample2/sample2_cell_2/sample1_cell_2_MMStack_Pos0.ome.tif'),
+             Path(mainPath + '/sample2/sample2_cell_3/sample1_cell_3_MMStack_Pos0.ome.tif'),
+             Path(mainPath + '/sample2/sample2_cell_4/sample1_cell_4_MMStack_Pos0.ome.tif'),
+             Path(mainPath + '/sample2/sample2_cell_5/sample1_cell_5_MMStack_Pos0.ome.tif')
              ]
 
     for file in files:
         print(file)
-        outFile = Path('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/180420_drp_mito_Dora/sample2/' + file.name[0:-8] + '_combine.ome.tif')
+        outFile = Path('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/'
+                       '180420_drp_mito_Dora/sample2/' + file.name[0:-8] + '_combine.ome.tif')
         cropOMETiff(file, outFile=outFile, cropFrame=None, cropRect=True)
         dataOrderMetadata(outFile.as_posix())
         calculateNNforStack(outFile.as_posix())
-    
+
     # with tifffile.TiffFile(file) as tif:
         # mdInfo = xmltodict.parse(tif.ome_metadata)
         # print(mdInfo['OME']['Image']['Description'])

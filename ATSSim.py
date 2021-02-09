@@ -15,229 +15,239 @@ import os
 import re
 import shutil
 
-import matplotlib.pyplot as plt
 import numpy as np
 from skimage import io
 from tensorflow import keras
 
 from NNfeeder import prepareNNImages
-from NNio import loadTifStack, dataOrderMetadata
-
-#
-#                          USER SETTINGS
-#
+from NNio import loadTifStack
 
 
-# stacks = ('C:/Users/stepp/Documents/02_Raw/Caulobacter_Zenodo/'
-#           '160613_ML2159_MTS-mCherry_FtsZ-GFP_80/'
-#           'SIM images/Series5_copy.ome.tiff')
-# stacks = [stacks]
-
-
-# Comment if only taking one stack
-allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/180420_drp_mito_Dora/**/*MMStack*_combine.ome.tif', recursive=True)
-
-# Just take the files that have not been analysed so far
-stacks = []
-for file in allFiles:
-    # nnFile = file[:-8] + '_nn.ome.tif'
-    atsFolder = file[:-4] + '_ATS'
-    # if not os.path.isfile(nnFile):
-    if not os.path.isdir(atsFolder):
-        stacks.append(file)
-        
-print('\n'.join(stacks))
-
-# stacks = ['C:/Users/stepp/Desktop/sample1_cell_2_mmstack_pos0_1.ome.tif']
-modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/model_Dora.h5'
-# Should we get the settings from the central settings file?
-extSettings = True
-dataOrder = 0  # 0 for drp/foci first, 1 for mito/structure first
-# data Order will be tried to read from the metadata directly in [Description][@dataOrder]
-
-if not extSettings:
-    # if extSettings is set to False, you can set the settings to be used here
-    thresholdLow = 70
-    thresholdUp = 90
-    slowRate = 600  # in seconds
-    # The fast frame rate is the rate of the original file for now.
-    minFastFrames = 5  # minimal number of fast frames after switching to fast. Should be > 2
+def atsOnStack(stacks: list):
+    """ Main function of the module that takes a list of files that should be tif stacks. The
+    function then performs ATS Simulation on these files and writes outputdata to a folder in
+    the same folder the file was in. This data can be displayed using NNGui."""
     #
-    #               USER SETTTINGS END
+    #                          USER SETTINGS
+    #   see end of file for setting the folders/files to do the simulation on
     #
+    modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/model_Dora.h5'
+    # Should we get the settings from the central settings file?
+    extSettings = True
+    dataOrder = 0  # 0 for drp/foci first, 1 for mito/structure first
+    # data Order will be tried to read from the metadata directly in [Description][@dataOrder]
 
-    # Save these settings for later documentation
-    settings = {'lowerThreshold': thresholdLow, 'upperThreshold': thresholdUp,
-                'slowRate': slowRate, 'minFastFrames': minFastFrames, 'dataOrder': dataOrder}
-else:
-    # if extSettings is True, load the settings from the json file
-    with open('./ATS_settings.json') as file:
-        settings = json.load(file)
-        thresholdLow = settings['lowerThreshold']
-        thresholdUp = settings['upperThreshold']
-        slowRate = settings['slowRate']
-        minFastFrames = settings['minFastFrames']
-        settings['dataOrder'] = dataOrder
+    if not extSettings:
+        # if extSettings is set to False, you can set the settings to be used here
+        thresholdLow = 70
+        thresholdUp = 90
+        slowRate = 600  # in seconds
+        # The fast frame rate is the rate of the original file for now.
+        minFastFrames = 5  # minimal number of fast frames after switching to fast. Should be > 2
+        #
+        #               USER SETTTINGS END
+        #
 
-model = keras.models.load_model(modelPath, compile=True)
-print('model loaded')
+        # Save these settings for later documentation
+        settings = {'lowerThreshold': thresholdLow, 'upperThreshold': thresholdUp,
+                    'slowRate': slowRate, 'minFastFrames': minFastFrames, 'dataOrder': dataOrder}
+    else:
+        # if extSettings is True, load the settings from the json file
+        with open('./ATS_settings.json') as file:
+            settings = json.load(file)
+            thresholdLow = settings['lowerThreshold']
+            thresholdUp = settings['upperThreshold']
+            slowRate = settings['slowRate']
+            minFastFrames = settings['minFastFrames']
+            settings['dataOrder'] = dataOrder
 
-for stack in stacks:
-    print(stack)
-    # Make a new folder to put the output in
-    newFolder = re.split(r'.tif', stack)[0] + '_ATS'
-    if os.path.exists(newFolder):
-        shutil.rmtree(newFolder)
-    os.mkdir(newFolder)
+    model = keras.models.load_model(modelPath, compile=True)
+    print('model loaded')
 
-    # Save the settings that were used for this run
-    settingsFile = os.path.join(newFolder, 'ATSSim_settings.json')
-    with open(settingsFile, 'w') as fp:
-        json_string = json.dumps(settings, default=lambda o: o.__dict__, sort_keys=True, indent=2)
-        fp.write(json_string)
+    for stack in stacks:
+        print(stack)
+        # Make a new folder to put the output in
+        newFolder = re.split(r'.tif', stack)[0] + '_ATS'
+        if os.path.exists(newFolder):
+            shutil.rmtree(newFolder)
+        os.mkdir(newFolder)
 
-    # Make the file that simulates the NetworkWatchdog txt file output
-    txtFile = os.path.join(newFolder, 'output.txt')
-    file = open(txtFile, 'w')
-    file.close()
-    file = open(txtFile, 'a')
+        # Save the settings that were used for this run
+        settingsFile = os.path.join(newFolder, 'ATSSim_settings.json')
+        with open(settingsFile, 'w') as fileHandle:
+            jsonString = json.dumps(settings, default=lambda o: o.__dict__,
+                                    sort_keys=True, indent=2)
+            fileHandle.write(jsonString)
 
-    #dataOrder = dataOrderMetadata(stack)
-    DrpOrig, MitoOrig, DrpTimes, MitoTimes = loadTifStack(stack, outputElapsed=True)
-    print('stack loaded')
-    # fig = plt.figure()
-    # fig.suptitle('This should be Drp')
-    # plt.imshow(DrpOrig[1])
-    # plt.show()
+        # Make the file that simulates the NetworkWatchdog txt file output
+        txtFile = os.path.join(newFolder, 'output.txt')
+        file = open(txtFile, 'w')
+        file.close()
+        file = open(txtFile, 'a')
 
-    time = DrpTimes[0]
-    frame = 0
-    fastMode = False
-    outputFrame = 0
-    delay = slowRate
-    fastCount = 0
+        # dataOrder = dataOrderMetadata(stack)
+        drpOrig, mitoOrig, drpTimes, mitoTimes = loadTifStack(stack, outputElapsed=True)
+        print('stack loaded')
+        # fig = plt.figure()
+        # fig.suptitle('This should be Drp')
+        # plt.imshow(drpOrig[1])
+        # plt.show()
 
-    outputData = []
-    print(DrpOrig.shape[0])
-    while frame < DrpOrig.shape[0]-1:
-        # make tiles for current frame
-        inputData, positions = prepareNNImages(MitoOrig[frame, :, :], DrpOrig[frame, :, :], 128)
+        time = drpTimes[0]
+        frame = 0
+        fastMode = False
+        outputFrame = 0
+        delay = slowRate
+        fastCount = 0
 
-        # Run neural network
-        outputPredict = model.predict_on_batch(inputData)
-        inputSize = round(DrpOrig.shape[1]*56/81)
+        outputData = []
+        print(drpOrig.shape[0])
+        while frame < drpOrig.shape[0]-1:
+            # make tiles for current frame
+            inputData, positions = prepareNNImages(mitoOrig[frame, :, :], drpOrig[frame, :, :], 128)
 
-        # Stitch the tiles back together (~2ms 512x512)
-        outputDataFull = np.zeros([inputSize, inputSize])
-        mitoDataFull = np.zeros([inputSize, inputSize])
-        drpDataFull = np.zeros([inputSize, inputSize])
-        i = 0
-        stitch = positions['stitch']
-        stitch1 = None if stitch == 0 else -stitch
-        for position in positions['px']:
-            outputDataFull[position[0]+stitch:position[2]-stitch,
-                           position[1]+stitch:position[3]-stitch] = \
-                outputPredict[i, stitch:stitch1, stitch:stitch1, 0]
-            mitoDataFull[position[0]+stitch:position[2]-stitch,
-                         position[1]+stitch:position[3]-stitch] = \
-                inputData[i, stitch:stitch1, stitch:stitch1, 0]
-            drpDataFull[position[0]+stitch:position[2]-stitch,
-                        position[1]+stitch:position[3]-stitch] = \
-                inputData[i, stitch:stitch1, stitch:stitch1, 1]
-            i = i + 1
+            # Run neural network
+            outputPredict = model.predict_on_batch(inputData)
+            inputSize = round(drpOrig.shape[1]*56/81)
 
-        # Get the output data from the nn channel
-        outputData.append(np.max(outputDataFull))
+            # Stitch the tiles back together (~2ms 512x512)
+            outputDataFull = np.zeros([inputSize, inputSize])
+            mitoDataFull = np.zeros([inputSize, inputSize])
+            drpDataFull = np.zeros([inputSize, inputSize])
+            i = 0
+            stitch = positions['stitch']
+            stitch1 = None if stitch == 0 else -stitch
+            for position in positions['px']:
+                outputDataFull[position[0]+stitch:position[2]-stitch,
+                               position[1]+stitch:position[3]-stitch] = \
+                    outputPredict[i, stitch:stitch1, stitch:stitch1, 0]
+                mitoDataFull[position[0]+stitch:position[2]-stitch,
+                             position[1]+stitch:position[3]-stitch] = \
+                    inputData[i, stitch:stitch1, stitch:stitch1, 0]
+                drpDataFull[position[0]+stitch:position[2]-stitch,
+                            position[1]+stitch:position[3]-stitch] = \
+                    inputData[i, stitch:stitch1, stitch:stitch1, 1]
+                i = i + 1
 
-        # Decide if skipping frames
+            # Get the output data from the nn channel
+            outputData.append(np.max(outputDataFull))
 
-        mitoPath = (newFolder + '/img_channel000_position000_time' +
-                    str((outputFrame*2 + 1)).zfill(9) + '_z000.tif')
-        mitoPrepPath = (newFolder + '/img_channel000_position000_time' +
-                    str((outputFrame*2 + 1)).zfill(9) + '_z000_prep.tif')
-        drpPath = (newFolder + '/img_channel000_position000_time' +
-                   str((outputFrame*2)).zfill(9) + '_z000.tif')
-        drpPrepPath = (newFolder + '/img_channel000_position000_time' +
-                   str((outputFrame*2)).zfill(9) + '_z000_prep.tif')
-        nnPath = (newFolder + '/img_channel000_position000_time' +
-                  str((outputFrame*2 + 1)).zfill(9) + '_nn.tiff')
-        io.imsave(mitoPath, MitoOrig[frame, :, :].astype(np.uint16),
-                  check_contrast=False, imagej=True,
-                  ijmetadata={'Info': json.dumps({'ElapsedTime-ms': MitoTimes[frame]})})
-        io.imsave(mitoPrepPath, mitoDataFull.astype(np.uint8),
-                  check_contrast=False, imagej=True,
-                  ijmetadata={'Info': json.dumps({'ElapsedTime-ms': MitoTimes[frame]})})
-        io.imsave(drpPath, DrpOrig[frame, :, :].astype(np.uint16),
-                  check_contrast=False, imagej=True,
-                  ijmetadata={'Info': json.dumps({'ElapsedTime-ms': DrpTimes[frame]})})
-        io.imsave(drpPrepPath, drpDataFull.astype(np.uint8),
-                  check_contrast=False, imagej=True,
-                  ijmetadata={'Info': json.dumps({'ElapsedTime-ms': DrpTimes[frame]})})
-        io.imsave(nnPath, outputDataFull.astype(np.uint8), check_contrast=False)
+            # Decide if skipping frames
 
-        # Write to output.txt file as networkWatchdog would
-        file.write('%d, %d\n' % (outputFrame*2 + 1, outputData[-1]))
+            mitoPath = (newFolder + '/img_channel000_position000_time' +
+                        str((outputFrame*2 + 1)).zfill(9) + '_z000.tif')
+            mitoPrepPath = (newFolder + '/img_channel000_position000_time' +
+                            str((outputFrame*2 + 1)).zfill(9) + '_z000_prep.tif')
+            drpPath = (newFolder + '/img_channel000_position000_time' +
+                       str((outputFrame*2)).zfill(9) + '_z000.tif')
+            drpPrepPath = (newFolder + '/img_channel000_position000_time' +
+                           str((outputFrame*2)).zfill(9) + '_z000_prep.tif')
+            nnPath = (newFolder + '/img_channel000_position000_time' +
+                      str((outputFrame*2 + 1)).zfill(9) + '_nn.tiff')
+            io.imsave(mitoPath, mitoOrig[frame, :, :].astype(np.uint16),
+                      check_contrast=False, imagej=True,
+                      ijmetadata={'Info': json.dumps({'ElapsedTime-ms': mitoTimes[frame]})})
+            io.imsave(mitoPrepPath, mitoDataFull.astype(np.uint8),
+                      check_contrast=False, imagej=True,
+                      ijmetadata={'Info': json.dumps({'ElapsedTime-ms': mitoTimes[frame]})})
+            io.imsave(drpPath, drpOrig[frame, :, :].astype(np.uint16),
+                      check_contrast=False, imagej=True,
+                      ijmetadata={'Info': json.dumps({'ElapsedTime-ms': drpTimes[frame]})})
+            io.imsave(drpPrepPath, drpDataFull.astype(np.uint8),
+                      check_contrast=False, imagej=True,
+                      ijmetadata={'Info': json.dumps({'ElapsedTime-ms': drpTimes[frame]})})
+            io.imsave(nnPath, outputDataFull.astype(np.uint8), check_contrast=False)
 
-        # if outputData[-1] > thresholdUp:
-        #     delay = 0
-        # elif outputData[-1] < thresholdLow and fastMode:
-        #     delay = slowRate
+            # Write to output.txt file as networkWatchdog would
+            file.write('%d, %d\n' % (outputFrame*2 + 1, outputData[-1]))
 
-        # Decide in which mode to go on, do at least minFastFrames fast frames after high output
-        if outputFrame > 0:
+            # if outputData[-1] > thresholdUp:
+            #     delay = 0
+            # elif outputData[-1] < thresholdLow and fastMode:
+            #     delay = slowRate
+
+            # Decide in which mode to go on, do at least minFastFrames fast frames after high output
+            if outputFrame > 0:
+                if fastMode:
+                    fastCount = fastCount + 1
+                if outputData[-2] > thresholdUp:
+                    print('FAST mode')
+                    fastMode = True
+                    fastCount = 0
+                elif outputData[-2] < thresholdLow and fastMode and fastCount > minFastFrames - 1:
+                    print('SLOW mode')
+                    fastMode = False
+
             if fastMode:
-                fastCount = fastCount + 1
-            if outputData[-2] > thresholdUp:
-                print('FAST mode')
-                fastMode = True
-                fastCount = 0
-            elif outputData[-2] < thresholdLow and fastMode and fastCount > minFastFrames - 1:
-                print('SLOW mode')
-                fastMode = False
+                delay = 0
+            else:
+                delay = slowRate
 
-        if fastMode:
-            delay = 0
-        else:
-            delay = slowRate
+            # Write iSIMmetadata File as Matlab would
+            if outputFrame > 0:
+                iSIMname = ('iSIMmetadata_Timing_' + str(int(time)).zfill(9) + '.txt')
+                iSIMMetadataFile = os.path.join(newFolder, iSIMname)
+                metaDataFile = open(iSIMMetadataFile, 'w')
+                metaDataFile.write('%d\t%.3f\t%d' % (0, delay, 1))
+                metaDataFile.close()
 
-        # Write iSIMmetadata File as Matlab would
-        if outputFrame > 0:
-            iSIMname = ('iSIMmetadata_Timing_' + str(int(time)).zfill(9) + '.txt')
-            iSIMMetadataFile = os.path.join(newFolder, iSIMname)
-            metaDataFile = open(iSIMMetadataFile, 'w')
-            metaDataFile.write('%d\t%.3f\t%d' % (0, delay, 1))
-            metaDataFile.close()
-
-        print('fast frames:', fastCount)
-        print(frame)
-        # Decide which frame to take next
-        if fastMode:
-            frame = frame + 1
-            time = DrpTimes[frame]
-        else:
-            # jump slowRate seconds and find which frame would be closest to this
-            time = time + slowRate*1000
-            oldFrame = frame
-            frame = min(range(len(DrpTimes)), key=lambda i: abs(DrpTimes[i]-time))
-            # check if it will jump at least one frame if not, jump one
-            if oldFrame == frame:
+            print('fast frames:', fastCount)
+            print(frame)
+            # Decide which frame to take next
+            if fastMode:
                 frame = frame + 1
-            if frame - oldFrame == 1:
-                print('Jumped one frame. slowRate might not be big enough.')
+                time = drpTimes[frame]
+            else:
+                # jump slowRate seconds and find which frame would be closest to this
+                time = time + slowRate*1000
+                oldFrame = frame
+                frame = min(range(len(drpTimes)), key=lambda i: abs(drpTimes[i]-time))
+                # check if it will jump at least one frame if not, jump one
+                if oldFrame == frame:
+                    frame = frame + 1
+                if frame - oldFrame == 1:
+                    print('Jumped one frame. slowRate might not be big enough.')
 
-            time = DrpTimes[frame]
+                time = drpTimes[frame]
 
-        outputFrame = outputFrame + 1
-        print(time)
-        print(outputData[-1])
-        print(frame)
-        print('\n')
+            outputFrame = outputFrame + 1
+            print(time)
+            print(outputData[-1])
+            print(frame)
+            print('\n')
 
-        if outputData[-1] == 0:
-            f = open("ATSSim_logging.txt", "a")
-            f.write('\n outputData was 0 at frame')
-            f.write(str(frame*2))
-            f.write('\n' + stack + '\n' + '\n')
-            f.close()
+            if outputData[-1] == 0:
+                fileHandle = open("ATSSim_logging.txt", "a")
+                fileHandle.write('\n outputData was 0 at frame')
+                fileHandle.write(str(frame*2))
+                fileHandle.write('\n' + stack + '\n' + '\n')
+                fileHandle.close()
 
-    file.close()
+        file.close()
+
+
+def main():
+    """ Define folders here that should be processed"""
+    # stacks = ('C:/Users/stepp/Documents/02_Raw/Caulobacter_Zenodo/'
+    #           '160613_ML2159_MTS-mCherry_FtsZ-GFP_80/'
+    #           'SIM images/Series5_copy.ome.tiff')
+    # stacks = [stacks]
+
+    # Comment if only taking one stack
+    allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage \
+        /Users/Willi/180420_drp_mito_Dora/**/*MMStack*_combine.ome.tif', recursive=True)
+
+    # Just take the files that have not been analysed so far
+    stacks = []
+    for file in allFiles:
+        # nnFile = file[:-8] + '_nn.ome.tif'
+        atsFolder = file[:-4] + '_ATS'
+        # if not os.path.isfile(nnFile):
+        if not os.path.isdir(atsFolder):
+            stacks.append(file)
+
+    print('\n'.join(stacks))
+
+
+if __name__ == '__main__':
+    main()
