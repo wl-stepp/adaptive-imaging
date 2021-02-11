@@ -144,67 +144,129 @@ batch_shuffle = True   # shuffle training data prior to batching and each epoch
 
 nb_filters = 8
 firstConvSize = 9
+model_version = '210211'
 
+if model_version == 'Dora':
 
-input_shape = (None, None, 2, 1) # was (128, 128, 2, 1)
-inputs = Input(shape=input_shape)
+    input_shape = (128, 128, 2, 1)
+    inputs = Input(shape=input_shape)
 
-# encoder section
+    # encoder section
 
-print('* Start Encoder Section *')
-down0 = Conv3D(
-    nb_filters, (firstConvSize, firstConvSize, 2), padding='same')(inputs)
-down0 = BatchNormalization()(down0)
-down0 = Activation('relu')(down0)
-down0 = Conv3D(
-    nb_filters, (firstConvSize, firstConvSize, 2), padding='same')(down0)
-down0 = BatchNormalization()(down0)
-down0 = Activation('relu')(down0)
-down0_pool = MaxPooling3D((2, 2, 2), strides=(2, 2, 2))(down0)
-# down0_pool = Reshape((None, None, nb_filters))(down0_pool)  # was 64, 64
-# down0 = Reshape((None, None, nb_filters*2))(down0)          # was 128, 128
+    print('* Start Encoder Section *')
+    down0 = Conv3D(
+        nb_filters, (firstConvSize, firstConvSize, 2), padding='same')(inputs)
+    down0 = BatchNormalization()(down0)
+    down0 = Activation('relu')(down0)
+    down0 = Conv3D(
+        nb_filters, (firstConvSize, firstConvSize, 2), padding='same')(down0)
+    down0 = BatchNormalization()(down0)
+    down0 = Activation('relu')(down0)
+    down0_pool = MaxPooling3D((2, 2, 2), strides=(2, 2, 2))(down0)
+    down0_pool = Reshape((64, 64, nb_filters))(down0_pool)
+    down0 = Reshape((128, 128, nb_filters*2))(down0)
 
-down1 = Conv2D(nb_filters*2, (3, 3), padding='same')(down0_pool)
-down1 = BatchNormalization()(down1)
-down1 = Activation('relu')(down1)
-down1 = Conv2D(nb_filters*2, (3, 3), padding='same')(down1)
-down1 = BatchNormalization()(down1)
-down1 = Activation('relu')(down1)
-down1_pool = MaxPooling2D((2, 2), strides=(2, 2))(down1)
+    down1 = Conv2D(nb_filters*2, (3, 3), padding='same')(down0_pool)
+    down1 = BatchNormalization()(down1)
+    down1 = Activation('relu')(down1)
+    down1 = Conv2D(nb_filters*2, (3, 3), padding='same')(down1)
+    down1 = BatchNormalization()(down1)
+    down1 = Activation('relu')(down1)
+    down1_pool = MaxPooling2D((2, 2), strides=(2, 2))(down1)
 
-# center section
+    # center section
 
-print('* Start Center Section *')
-center = Conv2D(nb_filters*4, (3, 3), padding='same')(down1_pool)
-center = BatchNormalization()(center)
-center = Activation('relu')(center)
-center = Conv2D(nb_filters*4, (3, 3), padding='same')(center)
-center = BatchNormalization()(center)
-center = Activation('relu')(center)
+    print('* Start Center Section *')
+    center = Conv2D(nb_filters*4, (3, 3), padding='same')(down1_pool)
+    center = BatchNormalization()(center)
+    center = Activation('relu')(center)
+    center = Conv2D(nb_filters*4, (3, 3), padding='same')(center)
+    center = BatchNormalization()(center)
+    center = Activation('relu')(center)
 
-# decoder section with skip connections to the encoder section
+    # decoder section with skip connections to the encoder section
 
-print('* Start Decoder Section *')
-up1 = UpSampling2D((2, 2))(center)
-up1 = concatenate([down1, up1], axis=3)
-up1 = Conv2D(nb_filters*2, (3, 3), padding='same')(up1)
-up1 = BatchNormalization()(up1)
-up1 = Activation('relu')(up1)
-up1 = Conv2D(nb_filters*2, (3, 3), padding='same')(up1)
-up1 = BatchNormalization()(up1)
-up1 = Activation('relu')(up1)
+    print('* Start Decoder Section *')
+    up1 = UpSampling2D((2, 2))(center)
+    up1 = concatenate([down1, up1], axis=3)
+    up1 = Conv2D(nb_filters*2, (3, 3), padding='same')(up1)
+    up1 = BatchNormalization()(up1)
+    up1 = Activation('relu')(up1)
+    up1 = Conv2D(nb_filters*2, (3, 3), padding='same')(up1)
+    up1 = BatchNormalization()(up1)
+    up1 = Activation('relu')(up1)
 
-up0 = UpSampling2D((2, 2))(up1)
-up0 = concatenate([down0, up0], axis=3)
-up0 = Conv2D(nb_filters, (3, 3), padding='same')(up0)
-up0 = BatchNormalization()(up0)
-up0 = Activation('relu')(up0)
-up0 = Conv2D(nb_filters, (3, 3), padding='same')(up0)
-up0 = BatchNormalization()(up0)
-up0 = Activation('relu')(up0)
+    up0 = UpSampling2D((2, 2))(up1)
+    up0 = concatenate([down0, up0], axis=3)
+    up0 = Conv2D(nb_filters, (3, 3), padding='same')(up0)
+    up0 = BatchNormalization()(up0)
+    up0 = Activation('relu')(up0)
+    up0 = Conv2D(nb_filters, (3, 3), padding='same')(up0)
+    up0 = BatchNormalization()(up0)
+    up0 = Activation('relu')(up0)
 
-outputs = Conv2D(1, (1, 1), activation='relu')(up0)
+    outputs = Conv2D(1, (1, 1), activation='relu')(up0)
 
+elif model_version == '210211':
+
+    input_shape = (None, None, 2)
+    inputs = Input(shape=input_shape)
+
+    # encoder section
+
+    print('* Start Encoder Section *')
+
+    down0 = Conv2D(
+        nb_filters, (firstConvSize, 2), padding='same')(inputs)
+    down0 = BatchNormalization()(down0)
+    down0 = Activation('relu')(down0)
+    down0 = Conv2D(
+        nb_filters, (firstConvSize, 2), padding='same')(down0)
+    down0 = BatchNormalization()(down0)
+    down0 = Activation('relu')(down0)
+    down0_pool = MaxPooling2D((2, 2), strides=(2, 2), padding='same')(down0)
+
+    down1 = Conv2D(nb_filters*2, (3, 3), padding='same')(down0_pool)
+    down1 = BatchNormalization()(down1)
+    down1 = Activation('relu')(down1)
+    down1 = Conv2D(nb_filters*2, (3, 3), padding='same')(down1)
+    down1 = BatchNormalization()(down1)
+    down1 = Activation('relu')(down1)
+    down1_pool = MaxPooling2D((2, 2), strides=(2, 2))(down1)
+
+    # center section
+
+    print('* Start Center Section *')
+    center = Conv2D(nb_filters*4, (3, 3), padding='same')(down1_pool)
+    center = BatchNormalization()(center)
+    center = Activation('relu')(center)
+    center = Conv2D(nb_filters*4, (3, 3), padding='same')(center)
+    center = BatchNormalization()(center)
+    center = Activation('relu')(center)
+
+    # decoder section with skip connections to the encoder section
+
+    print('* Start Decoder Section *')
+    up1 = UpSampling2D((2, 2))(center)
+    up1 = concatenate([down1, up1], axis=3)
+    up1 = Conv2D(nb_filters*2, (3, 3), padding='same')(up1)
+    up1 = BatchNormalization()(up1)
+    up1 = Activation('relu')(up1)
+    up1 = Conv2D(nb_filters*2, (3, 3), padding='same')(up1)
+    up1 = BatchNormalization()(up1)
+    up1 = Activation('relu')(up1)
+
+    up0 = UpSampling2D((2, 2))(up1)
+    up0 = concatenate([down0, up0], axis=3)
+    up0 = Conv2D(nb_filters, (3, 3), padding='same')(up0)
+    up0 = BatchNormalization()(up0)
+    up0 = Activation('relu')(up0)
+    up0 = Conv2D(nb_filters, (3, 3), padding='same')(up0)
+    up0 = BatchNormalization()(up0)
+    up0 = Activation('relu')(up0)
+
+    outputs = Conv2D(1, (1, 1), activation='relu')(up0)
+    outputs.set_shape([None, None, None, 1])
 
 print()
 print('* Compiling the network model *')
@@ -230,8 +292,7 @@ history = model.fit(input_train, output_train,
                     epochs=max_epochs,
                     validation_split=validtrain_split_ratio,
                     shuffle=batch_shuffle,
-                    verbose=0,
-                    callbacks=[TqdmCallback(verbose=1)])
+                    verbose=1)
 
 t2 = time.perf_counter()
 print()
