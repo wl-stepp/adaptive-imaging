@@ -132,7 +132,7 @@ def atsOnStack(stacks: list):
         delay = slowRate
         fastCount = 0
         fastCum = 0
-        
+
         outputData = []
         print(drpOrig.shape[0])
         while frame < drpOrig.shape[0]-1:
@@ -147,6 +147,9 @@ def atsOnStack(stacks: list):
             if model.layers[0].input_shape[0][1] is None:
                 # If the network is for full shape images, be sure that shape is multiple of 4
                 inputSize = inputSize - inputSize % 4
+                npType = np.float
+            else:
+                npType = np.uint8
 
             outputDataFull = np.zeros([inputSize, inputSize])
             mitoDataFull = np.zeros([inputSize, inputSize])
@@ -200,19 +203,19 @@ def atsOnStack(stacks: list):
                       check_contrast=False, imagej=False,
                       description=mitoMeta)
                       # {'Info': json.dumps({'ElapsedTime-ms': mitoTimes[frame]})})
-            io.imsave(mitoPrepPath, mitoDataFull.astype(np.uint8),
+            io.imsave(mitoPrepPath, mitoDataFull.astype(npType),
                       check_contrast=False, imagej=False,
                       description=mitoMeta)
             io.imsave(drpPath, drpOrig[frame, :, :].astype(np.uint16),
                       check_contrast=False, imagej=False,
                       description=drpMeta)
-            io.imsave(drpPrepPath, drpDataFull.astype(np.uint8),
+            io.imsave(drpPrepPath, drpDataFull.astype(npType),
                       check_contrast=False, imagej=False,
                       description=drpMeta)
-            io.imsave(nnPath, outputDataFull.astype(np.uint8), check_contrast=False)
+            io.imsave(nnPath, outputDataFull.astype(npType), check_contrast=False)
 
             # Write to output.txt file as networkWatchdog would
-            file.write('%d, %d\n' % (outputFrame*2 + 1, outputData[-1]))
+            file.write('%d, %.3f\n' % (outputFrame*2 + 1, outputData[-1]))
 
             # if outputData[-1] > thresholdUp:
             #     delay = 0
@@ -249,9 +252,9 @@ def atsOnStack(stacks: list):
                 metaDataFile = open(iSIMMetadataFile, 'w')
                 metaDataFile.write('%d\t%.3f\t%d' % (0, delay, 1))
                 metaDataFile.close()
-            
+
             print(str(frame), end=':  ')
-            
+
             # Decide which frame to take next
             if fastMode:
                 frame = frame + 1
