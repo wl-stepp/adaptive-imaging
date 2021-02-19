@@ -57,10 +57,12 @@ def prepareProc(threshold=150):
     output_data = np.array(output_data).astype(np.float)
     output_data = output_data > threshold
     # double dilation to increase minimal spot size
-    output_data = morphology.skeletonize(output_data)
-    output_data = morphology.binary_dilation(output_data)
-    output_data = morphology.binary_dilation(output_data)
-    output_data = morphology.binary_dilation(output_data)
+    for frame in range(output_data.shape[0]):
+        output_data[frame] = morphology.binary_opening(output_data[frame])
+        output_data[frame] = morphology.skeletonize(output_data[frame])
+        output_data[frame] = morphology.binary_dilation(output_data[frame])
+        output_data[frame] = morphology.binary_dilation(output_data[frame])
+        output_data[frame] = morphology.binary_dilation(output_data[frame])
     # output_data = output_data.astype(np.float)
     # output_data = exposure.rescale_intensity(
     #             output_data,
