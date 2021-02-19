@@ -33,7 +33,7 @@ def main():
 
     # Comment if only taking one stack
     allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/'
-                         '180420_drp_mito_Dora/**/*MMStack*_combine.ome.tif', recursive=True)
+                         '180420_drp_mito_Dora/**/*MMStack*_combine*.ome.tif', recursive=True)
 
     # allFiles = glob.glob('W:/iSIMstorage/Users/Willi/160622_caulobacter/'
     #                      '160622_CB15N_WT/SIM images/Series*[0-9].ome.tif')
@@ -42,11 +42,15 @@ def main():
     stacks = []
     for file in allFiles:
         # nnFile = file[:-8] + '_nn.ome.tif'
-        atsFolder = file[:-4] + '_ATS_ffmodel'
+        sample = re.split('sample', file)[1][0]
+        cell = re.split('cell_', file)[1][0]
+        atsFolder = os.path.dirname(file) + '/s' + str(sample).zfill(2) + '_c' + str(cell).zfill(2) + '_ATS'
+
+        # atsFolder = file[:-4] + '_ATS_ffmodel'
         # if not os.path.isfile(nnFile):
         if not os.path.isdir(atsFolder):
             stacks.append(file)
-
+    stacks = sorted(stacks)
     print('\n'.join(stacks))
     atsOnStack(stacks)
 
@@ -59,17 +63,17 @@ def atsOnStack(stacks: list):
     #                          USER SETTINGS
     #   see end of file for setting the folders/files to do the simulation on
     #
-    modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/test_model3.h5'
+    modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/model_Willi.h5'
     # Should we get the settings from the central settings file?
-    extSettings = True
+    extSettings = False
     dataOrder = 0  # 0 for drp/foci first, 1 for mito/structure first
     # data Order will be tried to read from the metadata directly in [Description][@dataOrder]
 
     if not extSettings:
         # if extSettings is set to False, you can set the settings to be used here
-        thresholdLow = 100
-        thresholdUp = 120
-        slowRate = 600  # in seconds
+        thresholdLow = 0.8
+        thresholdUp = 0.9
+        slowRate = 5  # in seconds
         # The fast frame rate is the rate of the original file for now.
         minFastFrames = 4  # minimal number of fast frames after switching to fast. Should be > 2
         #
@@ -95,7 +99,10 @@ def atsOnStack(stacks: list):
     for stack in stacks:
         print(stack)
         # Make a new folder to put the output in
-        newFolder = re.split(r'.tif', stack)[0] + '_ATS_ffmodel'
+        # newFolder = re.split(r'.tif', stack)[0] + '_ATS_ffmodel'
+        sample = re.split('sample', stack)[1][0]
+        cell = re.split('cell_', stack)[1][0]
+        newFolder = os.path.dirname(stack) + '/s' + str(sample).zfill(2) + '_c' + str(cell).zfill(2) + '_ATS'
         if os.path.exists(newFolder):
             shutil.rmtree(newFolder)
         os.mkdir(newFolder)
@@ -124,7 +131,8 @@ def atsOnStack(stacks: list):
         outputFrame = 0
         delay = slowRate
         fastCount = 0
-
+        fastCum = 0
+        
         outputData = []
         print(drpOrig.shape[0])
         while frame < drpOrig.shape[0]-1:
@@ -212,16 +220,22 @@ def atsOnStack(stacks: list):
             #     delay = slowRate
 
             # Decide in which mode to go on, do at least minFastFrames fast frames after high output
+            print('                                                                              ', end='\r')
             if outputFrame > 0:
                 if fastMode:
                     fastCount = fastCount + 1
+                    fastCum = fastCum + 1
                 if outputData[-2] > thresholdUp:
-                    print('FAST mode')
+                    print('FAST mode', end=' ')
                     fastMode = True
                     fastCount = 0
                 elif outputData[-2] < thresholdLow and fastMode and fastCount > minFastFrames - 1:
-                    print('SLOW mode')
+                    print('SLOW mode', end=' ')
                     fastMode = False
+                elif outputData[-2] > thresholdLow and fastMode:
+                    print('fast mode', end=' ')
+                else:
+                    print('slow mode', end=' ')
 
             if fastMode:
                 delay = 0
@@ -235,9 +249,9 @@ def atsOnStack(stacks: list):
                 metaDataFile = open(iSIMMetadataFile, 'w')
                 metaDataFile.write('%d\t%.3f\t%d' % (0, delay, 1))
                 metaDataFile.close()
-
-            print('fast frames:', fastCount)
-            print(frame)
+            
+            print(str(frame), end=':  ')
+            
             # Decide which frame to take next
             if fastMode:
                 frame = frame + 1
@@ -256,10 +270,11 @@ def atsOnStack(stacks: list):
                 time = drpTimes[frame]
 
             outputFrame = outputFrame + 1
-            print(time)
-            print(outputData[-1])
-            print(frame)
-            print('\n')
+            # print(time)
+            print(np.round(outputData[-1], 3), end='')
+            print(('  -> ' + str(frame)), end=' ')
+            print(('fast frames:' + str(fastCount)), end='\r')
+
 
             if outputData[-1] == 0:
                 fileHandle = open("ATSSim_logging.txt", "a")
@@ -269,6 +284,7 @@ def atsOnStack(stacks: list):
                 fileHandle.close()
 
         file.close()
+        print('\ntotal fast frames: ', fastCum, '\n\n')
 
 
 
