@@ -3,13 +3,16 @@ Module that implements an interface for viewing and analysing adaptive temporal 
 data that was generated using the iSIM.
 """
 
+import os
+import pickle
 import sys
+from tkinter import filedialog
 
 import numpy as np
 import pyqtgraph as pg
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtWidgets import QApplication, QGridLayout, QWidget
+from PyQt5.QtWidgets import QApplication, QFileDialog, QGridLayout, QWidget
 
 from NNio import loadElapsedTime, loadiSIMmetadata, loadNNData
 
@@ -74,8 +77,8 @@ class SatsGUI(QWidget):
         QWidget.__init__(self)
 
         self.folder = (
-             'W:/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/'
-             'sample1/sample1_cell_3/sample1_cell_3_MMStack_Pos0_2.ome_ATS')
+             'W:/iSIMstorage/Users/Willi/180420_drp_mito_Dora/sample1/'
+             'sample1_cell_3_MMStack_Pos0_combine.ome_ATS')
         # Windows for plotting
         self.plot = KeyPressWindow()
         self.plotItem1 = self.plot.plotItem
@@ -134,6 +137,7 @@ class SatsGUI(QWidget):
         self.nntimes = None
         self.inc = -1
         self.rects = []
+        self.lastKey = None
 
     def loadData(self, folder, progress=None, app=None):
         """ load timing data using the methods in the nnIO module """
@@ -219,11 +223,15 @@ class SatsGUI(QWidget):
         self.plotItem2.linkedViewChanged(self.plotItem1.vb, self.plotItem2.XAxis)
 
     def incrementView(self, event):
-        """ React to a press of 'A' and advance the presentation """
+        """ React to a press of 'A' and advance the presentation
+            Export Data on 'ctrl + S'  """
         if event.key() == 65:
             self.inc = self.inc + 1
             print(self.inc)
+        elif self.lastKey == 16777249 and event.key() == 83:
+            self.exportData()
         self.updatePlot()
+        self.lastKey = event.key()
 
     def deleteRects(self):
         """ delete all rectangles in the scene. This is used when calling from NNGui to adjust for
@@ -233,13 +241,25 @@ class SatsGUI(QWidget):
             del rect
         self.rects = []
 
+    def exportData(self):
+        """ Export the data in the plot to be saved with  """
+        fname = QFileDialog.getSaveFileName(QWidget(), 'Save file')
+        saveData = {
+            'delay': self.delay,
+            'nnOutput': self.nnData,
+            'times': self.elapsed
+        }
+        print(fname[0])
+        with open(fname[0], 'wb') as fileHandle:
+            pickle.dump(saveData, fileHandle, pickle.HIGHEST_PROTOCOL)
+
 
 def main():
     "Presentation mode of the GUI that can be advanced clicked the A button on the keyboard."
     app = QApplication(sys.argv)
     gui = SatsGUI()
-    folder = ('W:/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh/'
-              'sample1/sample1_cell_3/sample1_cell_3_MMStack_Pos0_1.ome_ATS')
+    folder = ('W:/iSIMstorage/Users/Willi/180420_drp_mito_Dora/sample1/'
+              'sample1_cell_3_MMStack_Pos0_combine.ome_ATS')
     gui.loadData(folder)
     # gui.loadData('W:/Watchdog/microM_test/201208_cell_Int0s_30pc_488_50pc_561_band_5')
     gui.show()

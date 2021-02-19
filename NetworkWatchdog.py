@@ -259,7 +259,7 @@ class NetworkWatchdog(QWidget):
 
         # Preprocess the data and make tiles if necessary
         inputData, positions = prepareNNImages(
-            mitoFull, drpFull, self.nnImageSize)
+            mitoFull, drpFull, self.model)
         # print(inputData.shape)
         # Calculate the prediction on the full batch of images
         outputPredict = self.model.predict_on_batch(inputData)

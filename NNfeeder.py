@@ -9,10 +9,10 @@ Returns:
 import numpy as np
 from skimage import exposure, filters, transform
 
-from ImageTiles import getTilePositionsV2
+from SmartMicro.ImageTiles import getTilePositionsV2
 
 
-def prepareNNImages(mitoFull, drpFull, nnImageSize=128):
+def prepareNNImages(mitoFull, drpFull, model):
     """Preprocess raw iSIM images before running them throught the neural network.
 
     Args:
@@ -28,9 +28,11 @@ def prepareNNImages(mitoFull, drpFull, nnImageSize=128):
     pixelCalib = 56  # nm per pixel
     sig = 121.5/81  # in pixel
     resizeParam = pixelCalib/81  # no unit
+    nnImageSize = model.layers[0].input_shape[0][1]
+    positions = None
 
     # Preprocess the images
-    if drpFull.shape[1] > nnImageSize:
+    if nnImageSize is None or drpFull.shape[1] > nnImageSize:
         # Adjust to 81nm/px
         mitoFull = transform.rescale(mitoFull, resizeParam)
         drpFull = transform.rescale(drpFull, resizeParam)
@@ -41,41 +43,58 @@ def prepareNNImages(mitoFull, drpFull, nnImageSize=128):
         drpFull = (filters.gaussian(drpFull, sig, preserve_range=True)
                    - filters.gaussian(drpFull, sig*5, preserve_range=True))
 
+        # Tiling
+        if nnImageSize is not None:
+            positions = getTilePositionsV2(drpFull, nnImageSize)
+            contrastMax = 255
+        else:
+            contrastMax = 1
+
         # Contrast
         drpFull = exposure.rescale_intensity(
-            drpFull, (np.min(drpFull), np.max(drpFull)), out_range=(0, 255))
+            drpFull, (np.min(drpFull), np.max(drpFull)), out_range=(0, contrastMax))
         mitoFull = exposure.rescale_intensity(
             mitoFull, (np.mean(mitoFull), np.max(mitoFull)),
-            out_range=(0, 255))
+            out_range=(0, contrastMax))
 
-        # Tiling
-        positions = getTilePositionsV2(drpFull, nnImageSize)
     else:
         positions = {'px': [(0, 0, drpFull.shape[1], drpFull.shape[1])],
                      'n': 1, 'overlap': 0, 'stitch': 0}
 
     # Put into format for the network
-    drpFull = drpFull.reshape(1, drpFull.shape[0], drpFull.shape[0], 1)
-    mitoFull = mitoFull.reshape(1, mitoFull.shape[0], mitoFull.shape[0], 1)
-    inputDataFull = np.concatenate((mitoFull, drpFull), axis=3)
+    if nnImageSize is not None:
+        drpFull = drpFull.reshape(1, drpFull.shape[0], drpFull.shape[0], 1)
+        mitoFull = mitoFull.reshape(1, mitoFull.shape[0], mitoFull.shape[0], 1)
+        inputDataFull = np.concatenate((mitoFull, drpFull), axis=3)
 
-    # Cycle through these tiles and make one array for everything
-    i = 0
-    inputData = np.zeros((positions['n']**2, nnImageSize, nnImageSize, 2))
-    for position in positions['px']:
-        inputData[i, :, :, :] = inputDataFull[:,
-                                              position[0]:position[2],
-                                              position[1]:position[3],
-                                              :]
-        # inputData[i, :, :, 1] =  exposure.rescale_intensity(
-        #    inputData[i, :, :, 1], (0, np.max(inputData[i, :, :, 1])),
-        #    out_range=(0, 255))
-        inputData[i, :, :, 0] = exposure.rescale_intensity(
-            inputData[i, :, :, 0], (0, np.max(inputData[i, :, :, 0])),
-            out_range=(0, 255))
+        # Cycle through these tiles and make one array for everything
+        i = 0
+        inputData = np.zeros((positions['n']**2, nnImageSize, nnImageSize, 2), dtype=np.uint8())
+        for position in positions['px']:
+            inputData[i, :, :, :] = inputDataFull[:,
+                                                  position[0]:position[2],
+                                                  position[1]:position[3],
+                                                  :]
+            # inputData[i, :, :, 1] =  exposure.rescale_intensity(
+            #    inputData[i, :, :, 1], (0, np.max(inputData[i, :, :, 1])),
+            #    out_range=(0, 255))
+            inputData[i, :, :, 0] = exposure.rescale_intensity(
+                inputData[i, :, :, 0], (0, np.max(inputData[i, :, :, 0])),
+                out_range=(0, 255))
+            i = i+1
+        inputData = inputData.astype('uint8')
+    else:
+        # This is now missing the tile-wise rescale_intensity for the mito channel.
+        # Image shape has to be in multiples of 4, not even quadratic
+        cropPixels = (mitoFull.shape[0] - mitoFull.shape[0] % 4,
+                      mitoFull.shape[1] - mitoFull.shape[1] % 4)
+        mitoFull = mitoFull[0:cropPixels[0], 0:cropPixels[1]]
+        drpFull = drpFull[0:cropPixels[0], 0:cropPixels[1]]
 
-        i = i+1
+        positions = getTilePositionsV2(mitoFull, 128)
+        mitoFull = mitoFull.reshape(1, mitoFull.shape[0], mitoFull.shape[0], 1)
+        drpFull = drpFull.reshape(1, drpFull.shape[0], drpFull.shape[0], 1)
+        inputData = np.stack((mitoFull, drpFull), 3)
 
-    inputData = inputData.astype('uint8')
 
     return inputData, positions

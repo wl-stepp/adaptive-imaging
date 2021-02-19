@@ -8,6 +8,7 @@ import glob
 import json
 import os
 import re
+import threading
 from pathlib import Path
 from tkinter import messagebox
 
@@ -20,8 +21,8 @@ import xmltodict
 from matplotlib.widgets import RectangleSelector
 from skimage import io
 
-import ImageTiles
-import NNfeeder
+import SmartMicro.NNfeeder
+from SmartMicro import ImageTiles, NNfeeder
 
 
 def loadiSIMmetadata(folder):
@@ -39,18 +40,6 @@ def loadiSIMmetadata(folder):
         numFrames = int(data[2])
         delay = np.append(delay, np.ones(numFrames)*data[1])
     return delay
-
-
-def loadTIF(folder):
-    """ deprecated was used for testing Metadata import """
-    file = 'img_channel000_position000_time000000001_z000.tif'
-    filePath = folder + '/' + file
-
-    tif = tifffile.TiffFile(filePath)
-    info = tif.imagej_metadata['Info']  # pylint: disable=E1136  # pylint/issues/3139
-    infoDict = json.loads(info)
-    print(infoDict['ElapsedTime-ms'])
-    tif.close()
 
 
 def loadElapsedTime(folder, progress=None, app=None):
@@ -72,11 +61,17 @@ def loadElapsedTime(folder, progress=None, app=None):
     i = 0
     for filePath in fileList:
         with tifffile.TiffFile(filePath) as tif:
-            mdInfo = tif.imagej_metadata['Info']  # pylint: disable=E1136  # pylint/issues/3139
-            if mdInfo is None:
-                mdInfo = tif.shaped_metadata[0]['Infos']  # pylint: disable=E1136
-            mdInfoDict = json.loads(mdInfo)
-            elapsed.append(mdInfoDict['ElapsedTime-ms'])
+            try:
+                mdInfo = tif.imagej_metadata['Info']  # pylint: disable=E1136  # pylint/issues/3139
+                if mdInfo is None:
+                    mdInfo = tif.shaped_metadata[0]['Infos']  # pylint: disable=E1136
+                mdInfoDict = json.loads(mdInfo)
+                elapsedTime = mdInfoDict['ElapsedTime-ms']
+            except (TypeError, KeyError) as _:
+                mdInfoDict = xmltodict.parse(tif.ome_metadata, force_list={'Plane'})
+                elapsedTime = float(mdInfoDict['OME']['Image']['Pixels']['Plane'][0]['@DeltaT'])
+
+            elapsed.append(elapsedTime)
         if app is not None:
             app.processEvents()
         # Progress the bar if available
@@ -136,6 +131,9 @@ def loadTifFolder(folder, resizeParam=1, order=0, progress=None, cropSquare=True
         splitStr = re.split(r'img_channel\d+_position\d+_time', os.path.basename(filePath))
         splitStr = re.split(r'_z\d+', splitStr[1])
         frameNum = int(splitStr[0])
+        if splitStr[1] == '_prep.tif':
+            continue
+
         if not frameNum % 2:
             # odd
             stack1[frame] = io.imread(filePath)
@@ -258,19 +256,23 @@ def loadTifStackElapsed(file, numFrames=None, skipFrames=0):
     with tifffile.TiffFile(file) as tif:
         if numFrames is None:
             numFrames = len(tif.pages)
-        mdInfo = tif.ome_metadata  # pylint: disable=E1136  # pylint/issues/3139
-        # This should work for single series ome.tifs
-        mdInfoDict = xmltodict.parse(mdInfo)
-        for frame in range(0, numFrames):
-            # Check which unit the DeltaT is
-            if mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaTUnit'] == 's':
-                unitMultiplier = 1000
-            else:
-                unitMultiplier = 1
-            if (frame % (skipFrames+1)) != 0:
-                continue
-            elapsed.append(unitMultiplier*float(
-                mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaT']))
+
+        try:
+            mdInfo = tif.ome_metadata  # pylint: disable=E1136  # pylint/issues/3139
+            # This should work for single series ome.tifs
+            mdInfoDict = xmltodict.parse(mdInfo)
+            for frame in range(0, numFrames):
+                # Check which unit the DeltaT is
+                if mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaTUnit'] == 's':
+                    unitMultiplier = 1000
+                else:
+                    unitMultiplier = 1
+                if (frame % (skipFrames+1)) != 0:
+                    continue
+                elapsed.append(unitMultiplier*float(
+                    mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaT']))
+        except TypeError:
+            elapsed = np.arange(0, numFrames)
     return elapsed
 
 
@@ -326,11 +328,12 @@ def calculateNNforStack(file, model=None):
     if model is None:
         from tensorflow import keras
         modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/model_Dora.h5'
+        modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/test_model3.h5'
         model = keras.models.load_model(modelPath, compile=True)
 
     # drpOrig, mitoOrig, elapsed, _ = loadTifStack(file, dataOrder,  outputElapsed=True)
 
-    nnPath = file[:-8] + '_nn.ome.tif'
+    nnPath = file[:-8] + '_nn_ffmodel.ome.tif'
 
     # Prepare the Metadata for the new file by extracting the ome-metadata
     with tifffile.TiffFile(file, fastij=False) as tif:
@@ -347,59 +350,76 @@ def calculateNNforStack(file, model=None):
 
     # Get each frame and calculate the nn-output for it
     inputData, positions = NNfeeder.prepareNNImages(mitoOrig[0, :, :],
-                                                    drpOrig[0, :, :], 128)
-    nnSize = positions['px'][-1][-1]
+                                                    drpOrig[0, :, :], model)
+    if model.layers[0].input_shape[0][1] is None:
+        nnSize = inputData.shape[1]
+    else:
+        nnSize = positions['px'][-1][-1]
+
     nnImage = np.zeros((int(drpOrig.shape[0]), nnSize, nnSize), dtype=np.uint8)
     for frame in range(drpOrig.shape[0]):
         printProgressBar(frame, drpOrig.shape[0], printEnd='\n')
         inputData, positions = NNfeeder.prepareNNImages(mitoOrig[frame, :, :],
-                                                        drpOrig[frame, :, :], 128)
+                                                        drpOrig[frame, :, :], model)
         outputPredict = model.predict_on_batch(inputData)
-        nnImage[frame, :, :] = ImageTiles.stitchImage(outputPredict, positions)
+        if model.layers[0].input_shape[0][1] is None:
+            nnImage[frame] = outputPredict[0, :, :, 0]
+        else:
+            nnImage[frame, :, :] = ImageTiles.stitchImage(outputPredict, positions)
 
     # Write the whole stack to a tif file with description
     tifffile.imwrite(nnPath, nnImage, description=mdInfo)
 
 
-def dataOrderMetadata(file, dataOrder=None):
+def dataOrderMetadata(file, dataOrder=None, write=True):
     """ Add a Tag to the tif that states with dataOrder it has """
-    reader = tifffile.TiffReader(file)
+    reader = tifffile.TiffFile(file)
     writeMetadata = False
     mdInfo = None
     if dataOrder is None:
         try:
             mdInfo = xmltodict.parse(reader.ome_metadata)
             dataOrder = mdInfo['OME']['Image']['Description']['@dataOrder']
+            if dataOrder == 'False':
+                raise TypeError('data Order should not be False')
             print(file)
             print('dataOrder already there: ' + dataOrder)
-            writeMetadata = False
         except (KeyError, TypeError) as _:
-            plt.imshow(reader.pages[0].asarray())
-            plt.show()
-            answer = messagebox.askyesno(title='dataOrder', message='Is this a mito image?')
-            dataOrder = 1 if answer else 0
-            writeMetadata = True
+            if threading.current_thread() is threading.main_thread():
+                plt.imshow(reader.pages[0].asarray())
+                plt.show()
+                answer = messagebox.askyesno(title='dataOrder', message='Is this a mito image?')
+                dataOrder = 1 if answer else 0
+            else:
+                dataOrder = None
+                print('Not in main thread, could not GUI detect dataOrder')
+            if write:
+                writeMetadata = True
         print(dataOrder)
+    else:
+        writeMetadata = True
 
     if writeMetadata:
         try:
             mdInfo = xmltodict.parse(reader.ome_metadata)
             mdInfo['OME']['Image']['Description']['@dataOrder'] = dataOrder
             print('dataOrder was already there overwritten')
-        except TypeError:
+        except (TypeError, KeyError) as error:
             try:
                 mdInfo['OME']['Image']['Description'] = {'@dataOrder': dataOrder}
                 print('Struct for dataOrder generated')
-            except UnboundLocalError:
-                mdInfo = ''
-                print('No OME metadata in this file')
-                return int(dataOrder)
+            except TypeError:
+                try:
+                    mdInfo['OME']['Image'] = {'Description': {'@dataOrder': dataOrder}}
+                except TypeError:
+                    mdInfo = {'OME': {'Image': {'Description': {'@dataOrder': dataOrder}}}}
+                    print('No OME metadata in this file?')
         mdInfo = xmltodict.unparse(mdInfo).encode(encoding='UTF-8', errors='strict')
         tifffile.tifffile.tiffcomment(file, comment=mdInfo)
         reader = tifffile.TiffReader(file)
         print(xmltodict.parse(reader.ome_metadata)['OME']['Image']['Description'])
 
-    return int(dataOrder)
+    return int(dataOrder) if dataOrder is not None else dataOrder
 
 
 def cropOMETiff(file, outFile=None, cropFrame=None, cropRect=None):
@@ -494,24 +514,23 @@ def defineCropRect(file):
 
 def main():
     """ Main method calculating a nn stack for a set of old Mito/drp stacks """
+
     allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/'
                          '180420_DRP_mito_Dora/**/*MMStack*lzw.ome.tif', recursive=True)
-    mainPath = '//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Dora/20180420_Dora_MitoGFP_Drp1mCh'
-    files = [
-             Path(mainPath + '/sample2/sample2_cell_1/sample1_cell_1_MMStack_Pos0.ome.tif'),
-             Path(mainPath + '/sample2/sample2_cell_2/sample1_cell_2_MMStack_Pos0.ome.tif'),
-             Path(mainPath + '/sample2/sample2_cell_3/sample1_cell_3_MMStack_Pos0.ome.tif'),
-             Path(mainPath + '/sample2/sample2_cell_4/sample1_cell_4_MMStack_Pos0.ome.tif'),
-             Path(mainPath + '/sample2/sample2_cell_5/sample1_cell_5_MMStack_Pos0.ome.tif')
-             ]
+    mainPath = 'W:/iSIMstorage/Users/Willi/160622_caulobacter/160622_CB15N_WT/SIM images'
+    mainPath = 'W:/iSIMstorage/Users/Willi/180420_drp_mito_Dora/**'
+    files = glob.glob(mainPath + '/*MMStack*_combine.ome.tif')
+
+    print('\n'.join(files))
+    files = [Path(file) for file in files]
 
     for file in files:
         print(file)
-        outFile = Path('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/'
-                       '180420_drp_mito_Dora/sample2/' + file.name[0:-8] + '_combine.ome.tif')
-        cropOMETiff(file, outFile=outFile, cropFrame=None, cropRect=True)
-        dataOrderMetadata(outFile.as_posix())
-        calculateNNforStack(outFile.as_posix())
+        outFile = Path('W:/iSIMstorage/Users/Willi/180420_drp_mito_Dora'
+                       + file.name[0:-8] + '_nn_ffmodel.ome.tif')
+        # cropOMETiff(file, outFile=outFile, cropFrame=None, cropRect=True)
+        dataOrderMetadata(file.as_posix())
+        calculateNNforStack(file.as_posix())
 
     # with tifffile.TiffFile(file) as tif:
         # mdInfo = xmltodict.parse(tif.ome_metadata)
@@ -581,6 +600,7 @@ def printProgressBar(iteration, total, prefix='', suffix='', decimals=1,
     if printEnd is None:
         pprocName = psutil.Process(os.getppid()).name()
         isIDLE = bool(re.fullmatch('pyhtonw.exe', pprocName))
+        print('checking shell:  ', isIDLE)
         if isIDLE:
             printEnd = '\n'
         else:

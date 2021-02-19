@@ -16,11 +16,39 @@ import re
 import shutil
 
 import numpy as np
+import xmltodict
 from skimage import io
 from tensorflow import keras
 
 from NNfeeder import prepareNNImages
-from NNio import loadTifStack
+from NNio import dataOrderMetadata, loadTifStack
+
+
+def main():
+    """ Define folders here that should be processed"""
+    # stacks = ('C:/Users/stepp/Documents/02_Raw/Caulobacter_Zenodo/'
+    #           '160613_ML2159_MTS-mCherry_FtsZ-GFP_80/'
+    #           'SIM images/Series5_copy.ome.tiff')
+    # stacks = [stacks]
+
+    # Comment if only taking one stack
+    allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/'
+                         '180420_drp_mito_Dora/**/*MMStack*_combine.ome.tif', recursive=True)
+
+    # allFiles = glob.glob('W:/iSIMstorage/Users/Willi/160622_caulobacter/'
+    #                      '160622_CB15N_WT/SIM images/Series*[0-9].ome.tif')
+
+    # Just take the files that have not been analysed so far
+    stacks = []
+    for file in allFiles:
+        # nnFile = file[:-8] + '_nn.ome.tif'
+        atsFolder = file[:-4] + '_ATS_ffmodel'
+        # if not os.path.isfile(nnFile):
+        if not os.path.isdir(atsFolder):
+            stacks.append(file)
+
+    print('\n'.join(stacks))
+    atsOnStack(stacks)
 
 
 def atsOnStack(stacks: list):
@@ -31,7 +59,7 @@ def atsOnStack(stacks: list):
     #                          USER SETTINGS
     #   see end of file for setting the folders/files to do the simulation on
     #
-    modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/model_Dora.h5'
+    modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/test_model3.h5'
     # Should we get the settings from the central settings file?
     extSettings = True
     dataOrder = 0  # 0 for drp/foci first, 1 for mito/structure first
@@ -39,11 +67,11 @@ def atsOnStack(stacks: list):
 
     if not extSettings:
         # if extSettings is set to False, you can set the settings to be used here
-        thresholdLow = 70
-        thresholdUp = 90
+        thresholdLow = 100
+        thresholdUp = 120
         slowRate = 600  # in seconds
         # The fast frame rate is the rate of the original file for now.
-        minFastFrames = 5  # minimal number of fast frames after switching to fast. Should be > 2
+        minFastFrames = 4  # minimal number of fast frames after switching to fast. Should be > 2
         #
         #               USER SETTTINGS END
         #
@@ -67,7 +95,7 @@ def atsOnStack(stacks: list):
     for stack in stacks:
         print(stack)
         # Make a new folder to put the output in
-        newFolder = re.split(r'.tif', stack)[0] + '_ATS'
+        newFolder = re.split(r'.tif', stack)[0] + '_ATS_ffmodel'
         if os.path.exists(newFolder):
             shutil.rmtree(newFolder)
         os.mkdir(newFolder)
@@ -86,12 +114,9 @@ def atsOnStack(stacks: list):
         file = open(txtFile, 'a')
 
         # dataOrder = dataOrderMetadata(stack)
+        dataOrder = dataOrderMetadata(stack, write=False)
         drpOrig, mitoOrig, drpTimes, mitoTimes = loadTifStack(stack, outputElapsed=True)
         print('stack loaded')
-        # fig = plt.figure()
-        # fig.suptitle('This should be Drp')
-        # plt.imshow(drpOrig[1])
-        # plt.show()
 
         time = drpTimes[0]
         frame = 0
@@ -104,35 +129,54 @@ def atsOnStack(stacks: list):
         print(drpOrig.shape[0])
         while frame < drpOrig.shape[0]-1:
             # make tiles for current frame
-            inputData, positions = prepareNNImages(mitoOrig[frame, :, :], drpOrig[frame, :, :], 128)
+            inputData, positions = prepareNNImages(mitoOrig[frame, :, :],
+                                                   drpOrig[frame, :, :], model)
 
             # Run neural network
             outputPredict = model.predict_on_batch(inputData)
             inputSize = round(drpOrig.shape[1]*56/81)
 
-            # Stitch the tiles back together (~2ms 512x512)
+            if model.layers[0].input_shape[0][1] is None:
+                # If the network is for full shape images, be sure that shape is multiple of 4
+                inputSize = inputSize - inputSize % 4
+
             outputDataFull = np.zeros([inputSize, inputSize])
             mitoDataFull = np.zeros([inputSize, inputSize])
             drpDataFull = np.zeros([inputSize, inputSize])
-            i = 0
-            stitch = positions['stitch']
-            stitch1 = None if stitch == 0 else -stitch
-            for position in positions['px']:
-                outputDataFull[position[0]+stitch:position[2]-stitch,
-                               position[1]+stitch:position[3]-stitch] = \
-                    outputPredict[i, stitch:stitch1, stitch:stitch1, 0]
-                mitoDataFull[position[0]+stitch:position[2]-stitch,
-                             position[1]+stitch:position[3]-stitch] = \
-                    inputData[i, stitch:stitch1, stitch:stitch1, 0]
-                drpDataFull[position[0]+stitch:position[2]-stitch,
-                            position[1]+stitch:position[3]-stitch] = \
-                    inputData[i, stitch:stitch1, stitch:stitch1, 1]
-                i = i + 1
+
+            if model.layers[0].input_shape[0][1] is None:
+                outputDataFull = outputPredict[0, :, :, 0]
+                mitoDataFull = inputData[0, :, :, 0, 0]
+                drpDataFull = inputData[0, :, :, 1, 0]
+            else:
+                # Stitch the tiles back together
+                i = 0
+                stitch = positions['stitch']
+                stitch1 = None if stitch == 0 else -stitch
+                for position in positions['px']:
+                    outputDataFull[position[0]+stitch:position[2]-stitch,
+                                position[1]+stitch:position[3]-stitch] = \
+                        outputPredict[i, stitch:stitch1, stitch:stitch1, 0]
+                    mitoDataFull[position[0]+stitch:position[2]-stitch,
+                                position[1]+stitch:position[3]-stitch] = \
+                        inputData[i, stitch:stitch1, stitch:stitch1, 0]
+                    drpDataFull[position[0]+stitch:position[2]-stitch,
+                                position[1]+stitch:position[3]-stitch] = \
+                        inputData[i, stitch:stitch1, stitch:stitch1, 1]
+                    i = i + 1
 
             # Get the output data from the nn channel
             outputData.append(np.max(outputDataFull))
 
-            # Decide if skipping frames
+            # ConstructMetadata
+            mitoMeta = {'OME': {'Image': {'Pixels': {'Plane': [{'@DeltaT': mitoTimes[frame]}]}}}}
+            mitoMeta['OME']['Image']['Pixels']['Plane'][0]['@DeltaTUnit'] = 'ms'
+            mitoMeta['OME']['Image']['Description'] = {'@dataOrder': dataOrder}
+            mitoMeta = xmltodict.unparse(mitoMeta).encode(encoding='UTF-8', errors='strict')
+            drpMeta = {'OME': {'Image': {'Pixels': {'Plane': [{'@DeltaT': drpTimes[frame]}]}}}}
+            drpMeta['OME']['Image']['Pixels']['Plane'][0]['@DeltaTUnit'] = 'ms'
+            drpMeta['OME']['Image']['Description'] = {'@dataOrder': dataOrder}
+            drpMeta = xmltodict.unparse(drpMeta).encode(encoding='UTF-8', errors='strict')
 
             mitoPath = (newFolder + '/img_channel000_position000_time' +
                         str((outputFrame*2 + 1)).zfill(9) + '_z000.tif')
@@ -145,17 +189,18 @@ def atsOnStack(stacks: list):
             nnPath = (newFolder + '/img_channel000_position000_time' +
                       str((outputFrame*2 + 1)).zfill(9) + '_nn.tiff')
             io.imsave(mitoPath, mitoOrig[frame, :, :].astype(np.uint16),
-                      check_contrast=False, imagej=True,
-                      ijmetadata={'Info': json.dumps({'ElapsedTime-ms': mitoTimes[frame]})})
+                      check_contrast=False, imagej=False,
+                      description=mitoMeta)
+                      # {'Info': json.dumps({'ElapsedTime-ms': mitoTimes[frame]})})
             io.imsave(mitoPrepPath, mitoDataFull.astype(np.uint8),
-                      check_contrast=False, imagej=True,
-                      ijmetadata={'Info': json.dumps({'ElapsedTime-ms': mitoTimes[frame]})})
+                      check_contrast=False, imagej=False,
+                      description=mitoMeta)
             io.imsave(drpPath, drpOrig[frame, :, :].astype(np.uint16),
-                      check_contrast=False, imagej=True,
-                      ijmetadata={'Info': json.dumps({'ElapsedTime-ms': drpTimes[frame]})})
+                      check_contrast=False, imagej=False,
+                      description=drpMeta)
             io.imsave(drpPrepPath, drpDataFull.astype(np.uint8),
-                      check_contrast=False, imagej=True,
-                      ijmetadata={'Info': json.dumps({'ElapsedTime-ms': drpTimes[frame]})})
+                      check_contrast=False, imagej=False,
+                      description=drpMeta)
             io.imsave(nnPath, outputDataFull.astype(np.uint8), check_contrast=False)
 
             # Write to output.txt file as networkWatchdog would
@@ -226,27 +271,6 @@ def atsOnStack(stacks: list):
         file.close()
 
 
-def main():
-    """ Define folders here that should be processed"""
-    # stacks = ('C:/Users/stepp/Documents/02_Raw/Caulobacter_Zenodo/'
-    #           '160613_ML2159_MTS-mCherry_FtsZ-GFP_80/'
-    #           'SIM images/Series5_copy.ome.tiff')
-    # stacks = [stacks]
-
-    # Comment if only taking one stack
-    allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage \
-        /Users/Willi/180420_drp_mito_Dora/**/*MMStack*_combine.ome.tif', recursive=True)
-
-    # Just take the files that have not been analysed so far
-    stacks = []
-    for file in allFiles:
-        # nnFile = file[:-8] + '_nn.ome.tif'
-        atsFolder = file[:-4] + '_ATS'
-        # if not os.path.isfile(nnFile):
-        if not os.path.isdir(atsFolder):
-            stacks.append(file)
-
-    print('\n'.join(stacks))
 
 
 if __name__ == '__main__':

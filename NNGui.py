@@ -28,7 +28,8 @@ from skimage import exposure, transform
 from tensorflow import keras
 
 from NNfeeder import prepareNNImages
-from NNio import loadTifFolder, loadTifStack
+from NNio import (dataOrderMetadata, loadTifFolder, loadTifStack,
+                  loadTifStackElapsed)
 from QtImageViewerMerge import QtImageViewerMerge
 from SatsGUI import SatsGUI
 
@@ -198,7 +199,7 @@ class NNGui(QWidget):
     def receiveData(self, data):
         """ Receive the data from the loading worker """
         self.frameSlider.setDisabled(True)
-        print('copy the loaded data to GUI')
+        self.setLogString('copy the loaded data to GUI')
         self.mode = data.mode
         self.imageMitoOrig = data.imageMitoOrig
         self.imageDrpOrig = data.imageDrpOrig
@@ -208,7 +209,7 @@ class NNGui(QWidget):
         self.virtualFolder = data.folder
         self.nnOutput = data.nnOutput
         self.maxPos = data.maxPos
-        self.frameSlider.setMaximum(data.frameNum-1)
+        self.frameSlider.setMaximum(data.frameNum - 1)
         # self.refreshGradients()
         self.loadingStatusLabel.setText('Done')
         self.viewerProc.viewBox.setRange(xRange=(0, data.postSize), yRange=(0, data.postSize))
@@ -216,8 +217,12 @@ class NNGui(QWidget):
         # Make the SATS_GUI plot for nn_output vs time
         self.outputPlot.resetPlot()
         if self.mode == 'stack':
-            self.outputPlot.nnline.setData(data.outputData)
-            self.outputPlot.scatter.setData(range(0, len(data.outputData)), data.outputData)
+            self.outputPlot.nnline.setData(data.elapsed[0::2], data.outputData)
+            self.outputPlot.scatter.setData(data.elapsed[0::2], data.outputData)
+            self.outputPlot.elapsed = data.elapsed[0::2]
+            self.outputPlot.delay = [data.elapsed[2] - data.elapsed[0]]*len(data.elapsed[0::2])
+            nnPrep = np.stack((list(np.arange(0, len(data.outputData))), data.outputData), 0)
+            self.outputPlot.nnData = nnPrep.transpose()
         else:
             self.loadingStatusLabel.setText('Getting the timing data')
             self.outputPlot.loadData(data.folder, self.progress, self.app)
@@ -264,7 +269,7 @@ class NNGui(QWidget):
         """ Load a .h5 model generated using Keras """
         self.loadingStatusLabel.setText('Loading Model')
         fname = QFileDialog.getOpenFileName(
-            self, 'Open file', 'C:/Users/stepp/Documents/02_Raw/SmartMito/',
+            self, 'Open file', '//lebnas1.epfl.ch/microsc125/Watchdog/Model',
             "Keras models (*.h5)")
         self.model = keras.models.load_model(fname[0], compile=True)
         self.loadingStatusLabel.setText('Done')
@@ -328,10 +333,10 @@ class NNGui(QWidget):
             self.viewerNN.setImage(self.nnOutput[i], 0)
             self.currentFrameLabel.setText(str(i))
 
-        if self.mode == 'stack':
-            self.frameLine.setValue(i)
-        else:
-            self.frameLine.setValue(self.outputPlot.elapsed[i])
+        # if self.mode == 'stack':
+        #     self.frameLine.setValue(i)
+        # else:
+        self.frameLine.setValue(self.outputPlot.elapsed[i])
         self.viewerOrig.cross.setPosition([self.maxPos[i][0]])
         self.viewerProc.cross.setPosition([self.maxPos[i][0]])
         self.viewerNN.cross.setPosition([self.maxPos[i][0]])
@@ -426,6 +431,7 @@ class LoadingThread(QObject):
         if self.virtualStack:
             self.setLog.emit("Virtual stack mode")
             self.folder = os.path.dirname(fname[0])
+            self.setLog.emit(self.folder)
             self.startFolder = os.path.dirname(os.path.dirname(fname[0]))
             self.mode = 'virtual'
             if os.path.exists(self.folder + '/ATSSim_settings.json'):
@@ -448,10 +454,14 @@ class LoadingThread(QObject):
             # If not singular files in folder, load as interleaved stack
             self.mode = 'stack'
             self.setLog.emit("Stack mode")
+            detectDataOrder = dataOrderMetadata(fname[0], write=False)
+            if detectDataOrder is not None:
+                self.dataOrder = int(detectDataOrder)
             self.imageDrpOrig, self.imageMitoOrig = loadTifStack(fname[0], order=self.dataOrder)
             # Save this to go back to when the user wants to load another file
             self.startFolder = os.path.dirname(fname[0])
             self.setLog.emit(fname[0])
+            self.elapsed = loadTifStackElapsed(fname[0])
         # self.updateProgressRange.emit(self.imageDrpOrig.shape[0])
         self.setLog.emit('Data order: ' + str(self.dataOrder))
 
@@ -481,6 +491,9 @@ class LoadingThread(QObject):
         # Initialize values and data for neural network
         self.frameNum = self.imageMitoOrig.shape[0]
         self.postSize = round(self.imageMitoOrig.shape[1]*self.resizeParam)
+        if self.model.layers[0].input_shape[0][1] is None:
+            # If the network is for full shape images, be sure that shape is multiple of 4
+            self.postSize = self.postSize - self.postSize % 4
         if self.mode == 'stack':
             self.nnOutput = np.zeros((self.frameNum, self.postSize, self.postSize))
         self.mitoDataFull = np.zeros_like(self.nnOutput)
@@ -493,7 +506,7 @@ class LoadingThread(QObject):
             # Make preprocessed tiles that can be fed to the neural network
             inputData, positions = prepareNNImages(
                 self.imageMitoOrig[frame, :, :],
-                self.imageDrpOrig[frame, :, :], self.nnImageSize)
+                self.imageDrpOrig[frame, :, :], self.model)
 
             # Do the NN calculation if there is not already a file there
             outputPredict = None
@@ -504,19 +517,27 @@ class LoadingThread(QObject):
                 outputPredict = self.model.predict_on_batch(inputData)
                 self.nnRecalculated[frame] = 1
 
-            # Stitch the tiles made back together
-            i = 0
-            st0 = positions['stitch']
-            st1 = None if st0 == 0 else -st0
-            for pos in positions['px']:
+            if self.model.layers[0].input_shape[0][1] is None:
+                # Just copy the full frame if a full frame network was used
                 if nnDataPres == 0:
-                    self.nnOutput[frame, pos[0]+st0:pos[2]-st0, pos[1]+st0:pos[3]-st0] =\
-                                outputPredict[i, st0:st1, st0:st1, 0]
-                self.mitoDataFull[frame, pos[0]+st0:pos[2]-st0, pos[1]+st0:pos[3]-st0] = \
-                    inputData[i, st0:st1, st0:st1, 0]
-                self.drpDataFull[frame, pos[0]+st0:pos[2]-st0, pos[1]+st0:pos[3]-st0] = \
-                    inputData[i, st0:st1, st0:st1, 1]
-                i += 1
+                    self.nnOutput[frame] = outputPredict[0, :, :, 0]
+                    self.mitoDataFull[frame] = inputData[0, :, :, 0, 0]
+                    self.drpDataFull[frame] = inputData[0, :, :, 1, 0]
+            else:
+                # Stitch the tiles made back together if model needs it
+                i = 0
+                st0 = positions['stitch']
+                st1 = None if st0 == 0 else -st0
+                for pos in positions['px']:
+                    if nnDataPres == 0:
+                        self.nnOutput[frame, pos[0]+st0:pos[2]-st0, pos[1]+st0:pos[3]-st0] =\
+                                    outputPredict[i, st0:st1, st0:st1, 0]
+                    self.mitoDataFull[frame, pos[0]+st0:pos[2]-st0, pos[1]+st0:pos[3]-st0] = \
+                        inputData[i, st0:st1, st0:st1, 0]
+                    self.drpDataFull[frame, pos[0]+st0:pos[2]-st0, pos[1]+st0:pos[3]-st0] = \
+                        inputData[i, st0:st1, st0:st1, 1]
+                    i += 1
+
 
             # Get the output data from the nn channel and its position
             self.outputData.append(np.max(self.nnOutput[frame, :, :]))
@@ -529,14 +550,17 @@ class LoadingThread(QObject):
         imageDrpOrigScaled = np.zeros((self.imageDrpOrig.shape[0], self.postSize, self.postSize))
         imageMitoOrigScaled = np.zeros((self.imageDrpOrig.shape[0], self.postSize, self.postSize))
         for i in range(0, self.imageMitoOrig.shape[0]):
-            imageDrpOrigScaled[i] = transform.rescale(self.imageDrpOrig[i], self.resizeParam,
+            imageDrpOrigScaled[i] = transform.rescale(self.imageDrpOrig[i],
+                                                      self.postSize/self.imageDrpOrig[i].shape[1],
                                                       anti_aliasing=True, preserve_range=True)
-            imageMitoOrigScaled[i] = transform.rescale(self.imageMitoOrig[i], self.resizeParam,
+            imageMitoOrigScaled[i] = transform.rescale(self.imageMitoOrig[i],
+                                                       self.postSize/self.imageMitoOrig[i].shape[1],
                                                        anti_aliasing=True, preserve_range=True)
             self.change_progress.emit(i)
             # QApplication.processEvents()
 
         # Rescale the exposures
+        self.setLabel.emit('Rescale the original frames to 8 bit')
         imageDrpOrigScaled = exposure.rescale_intensity(
             np.array(imageDrpOrigScaled), (np.min(np.array(imageDrpOrigScaled)),
                                            np.max(np.array(imageDrpOrigScaled))),
