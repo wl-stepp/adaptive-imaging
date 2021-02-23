@@ -7,15 +7,17 @@ Created on Fri Oct 23 11:01:27 2020
 """
 
 import os
+import pickle
 import re
 import time
 
 import h5py  # HDF5 data file management library
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import psutil
 import tensorflow as tf
-from skimage import exposure, morphology
+from skimage import exposure, morphology, segmentation
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.layers import Activation, Input
 from tensorflow.keras.models import Model
@@ -55,23 +57,51 @@ def prepareProc(threshold=150):
     output_data = hf.get('Proc')  # Mito
     # binarize with a certain threshold
     output_data = np.array(output_data).astype(np.float)
+    hf.close()
+    print('* data loaded *')
     output_data = output_data > threshold
     # double dilation to increase minimal spot size
     for frame in range(output_data.shape[0]):
-        output_data[frame] = morphology.binary_opening(output_data[frame])
+        printProgressBar(frame, output_data.shape[0], printEnd='\r')
+        output_data[frame] = morphology.binary_dilation(output_data[frame])
+        output_data[frame] = morphology.binary_erosion(output_data[frame])
+        output_data[frame] = morphology.binary_dilation(output_data[frame])
         output_data[frame] = morphology.skeletonize(output_data[frame])
         output_data[frame] = morphology.binary_dilation(output_data[frame])
         output_data[frame] = morphology.binary_dilation(output_data[frame])
-        output_data[frame] = morphology.binary_dilation(output_data[frame])
+
+        # check for something on the border of the image
+        for x in range(output_data.shape[1]):
+            if output_data[frame, x, 0]:
+                output_data[frame] = segmentation.flood_fill(output_data[frame], (x, 0), 0)
+            if output_data[frame, x, -1]:
+                output_data[frame] = segmentation.flood_fill(
+                    output_data[frame], (x, output_data.shape[2]-1), 0)
+        for y in range(output_data.shape[2]):
+            if output_data[frame, 0, y]:
+                output_data[frame] = segmentation.flood_fill(output_data[frame], (0, y), 0)
+            if output_data[frame, -1, y]:
+                output_data[frame] = segmentation.flood_fill(
+                    output_data[frame], (output_data.shape[1]-1, y), 0)
+
+
     # output_data = output_data.astype(np.float)
     # output_data = exposure.rescale_intensity(
     #             output_data,
     #             (100, np.max(output_data)),
     #             out_range=(0, 1))
     print(output_data.shape)
+    plotTest = True
+    if plotTest:
+        fig = plt.figure()
+        ax = fig.gca()
+        image = ax.imshow(output_data[0], vmax=1)
+        for frame in range(0, 3000, 100):
+            image.set_data(output_data[frame].astype(np.uint8))
+            plt.draw()
+            plt.pause(1)
     output_data = output_data.reshape(output_data.shape[0], 128, 128, 1)
-    hf.close()
-    hf = h5py.File('W:/Watchdog/Model/prep_data.h5', 'a')
+    hf = h5py.File('W:/Watchdog/Model/prep_data2.h5', 'a')
     try:
         del hf['Proc']
     except KeyError:
@@ -79,34 +109,23 @@ def prepareProc(threshold=150):
     hf.create_dataset('Proc', data=output_data)
     hf.close()
 
-def makeModel(nb_filters=32, firstConvSize=5, batch_size=16):
+def makeModel(input_data, output_data, nb_filters=32, firstConvSize=5, batch_size=16):
     # batch size for the training data set
     # Import data
     # Changed from the Colab version to load local data
     data_path = 'W:/Watchdog/Model/'  # nb: begin with /
     print('data_path : ', data_path, '\n')
 
-    model_name = '/paramSweep/temp_model'
-    data_filename = data_path + 'prep_data.h5'  # Mito
-
-    print('* Importing data *')
-    hf = h5py.File(data_filename, 'r')
-    input_data1 = hf.get('Mito')
-    input_data1 = np.array(input_data1).astype(np.float)
-    input_data2 = hf.get('Drp1')  # Drp1
-    input_data2 = np.array(input_data2).astype(np.float)
-    input_data = np.stack((input_data1, input_data2), axis=3)
-
-    output_data = hf.get('Proc')
-    output_data = np.array(output_data).astype(np.float)
-    hf.close()
-
-    print('\nInput : ', input_data.shape)
-    print('Output : \n', output_data.shape)
-
+    model_name = '/paramSweep2/temp_model'
 
     # Split data set into [test] and [train+valid] subsets using sklearn
     # train_test_split function
+
+    # Prepare labels that are shuffled the same way that train_test_split will. Save these to
+    # know which indices of frames where the test data for this model
+    labels = np.arange(0, input_data.shape[0], 1)
+    labels = shuffle(labels, random_state=data_split_state)[0:input_data.shape[0]*
+                                                            data_set_test_trainvalid_ratio]
 
     data_set_test_trainvalid_ratio = 0.2
     data_split_state = None
@@ -136,7 +155,7 @@ def makeModel(nb_filters=32, firstConvSize=5, batch_size=16):
     validtrain_split_ratio = 0.2
     # % of the seen dataset to be put aside for validation, rest is for training
     max_epochs = 20  # maxmimum number of epochs to be iterated
-    batch_shuffle = True   # shuffle training data prior to batching and each epoch
+    batch_shuffle = True   # shuffle training data prior to; batching and each epoch
 
     model_version = '210219'
 
@@ -350,8 +369,6 @@ def makeModel(nb_filters=32, firstConvSize=5, batch_size=16):
 
     print(model.summary())
     print()
-
-
     print('* Training the compiled network *')
     print()
 
@@ -424,60 +441,62 @@ def makeModel(nb_filters=32, firstConvSize=5, batch_size=16):
     model.save(model_path + '.h5')
     tf.keras.models.save_model(model, model_path)
 
-    print('* Predicting the output of a given input from test set *')
-    print()
-
-    # for i in range(input_test.shape[0]):
-
-    for i in range(3):
-        test_id = i
-
-        # create numpy array of required dimensions for network input
-        input_predict = np.zeros(shape=(1, 128, 128, 2))
-
-        # reshaping test input image
-        input_predict[0, :, :, :] = input_test[test_id, :, :, :, 0]
-        t1 = time.perf_counter()
-        output_predict = model.predict(input_predict)
-        t2 = time.perf_counter()
-
-        print('time taken for prediction : ', t2-t1)
-
-        print('test_id : ', test_id)
+    plotOutput = False
+    if plotOutput:
+        print('* Predicting the output of a given input from test set *')
         print()
 
-        # plot prediction example from test set
-        fig = plt.figure()
-        fig.add_subplot(2,2, 1)
-        plt.imshow(input_test[test_id, :, :, 0], cmap='gray')
-        plt.title('input_test [' + str(test_id) + ']')
-        plt.grid(None)
-        plt.xticks([])
-        plt.yticks([])
+        # for i in range(input_test.shape[0]):
 
-        fig.add_subplot(2, 2, 2)
-        plt.imshow(input_test[test_id, :, :, 1], cmap='gray')
-        plt.title('input_test [' + str(test_id) + ']')
-        plt.grid(None)
-        plt.xticks([])
-        plt.yticks([])
+        for i in range(3):
+            test_id = i
 
-        fig.add_subplot(2, 2, 3)
-        plt.imshow(output_predict[0, :, :, 0], cmap='gray', vmax=1)
-        plt.title('output_predict')
-        plt.grid(None)
-        plt.xticks([])
-        plt.yticks([])
+            # create numpy array of required dimensions for network input
+            input_predict = np.zeros(shape=(1, 128, 128, 2))
 
-        fig.add_subplot(2, 2, 4)
-        plt.imshow(output_test[test_id, :, :, 0], cmap='gray',vmax=1)
-        plt.title('output_test [' + str(test_id) + ']')
-        plt.grid(None)
-        plt.xticks([])
-        plt.yticks([])
-        plt.draw()
-        plt.pause(2)
-    return model
+            # reshaping test input image
+            input_predict[0, :, :, :] = input_test[test_id, :, :, :, 0]
+            t1 = time.perf_counter()
+            output_predict = model.predict(input_predict)
+            t2 = time.perf_counter()
+
+            print('time taken for prediction : ', t2-t1)
+
+            print('test_id : ', test_id)
+            print()
+
+            # plot prediction example from test set
+            fig = plt.figure()
+            fig.add_subplot(2,2, 1)
+            plt.imshow(input_test[test_id, :, :, 0], cmap='gray')
+            plt.title('input_test [' + str(test_id) + ']')
+            plt.grid(None)
+            plt.xticks([])
+            plt.yticks([])
+
+            fig.add_subplot(2, 2, 2)
+            plt.imshow(input_test[test_id, :, :, 1], cmap='gray')
+            plt.title('input_test [' + str(test_id) + ']')
+            plt.grid(None)
+            plt.xticks([])
+            plt.yticks([])
+
+            fig.add_subplot(2, 2, 3)
+            plt.imshow(output_predict[0, :, :, 0], cmap='gray', vmax=1)
+            plt.title('output_predict')
+            plt.grid(None)
+            plt.xticks([])
+            plt.yticks([])
+
+            fig.add_subplot(2, 2, 4)
+            plt.imshow(output_test[test_id, :, :, 0], cmap='gray',vmax=1)
+            plt.title('output_test [' + str(test_id) + ']')
+            plt.grid(None)
+            plt.xticks([])
+            plt.yticks([])
+            plt.draw()
+            plt.pause(2)
+    return model, labels
 
 def printProgressBar(iteration, total, prefix='', suffix='', decimals=1,
                      length=100, fill='█', printEnd=None):
@@ -510,18 +529,36 @@ def printProgressBar(iteration, total, prefix='', suffix='', decimals=1,
 
 
 def main():
-    filters = [8, 16, 32]
+    print('* Importing data *')
+    data_path = 'W:/Watchdog/Model/'  # nb: begin with /
+    data_filename = data_path + 'prep_data2.h5'  # Mito
+    hf = h5py.File(data_filename, 'r')
+    input_data1 = hf.get('Mito')
+    input_data1 = np.array(input_data1).astype(np.float)
+    input_data2 = hf.get('Drp1')  # Drp1
+    input_data2 = np.array(input_data2).astype(np.float)
+    input_data = np.stack((input_data1, input_data2), axis=3)
+
+    output_data = hf.get('Proc')
+    output_data = np.array(output_data).astype(np.float)
+    hf.close()
+
+    print('\nInput : ', input_data.shape)
+    print('Output : \n', output_data.shape)
+
+    filters = [16, 32]  # 8
     convs = [3, 5, 9, 11]
     batches = [8, 16, 32]
     for f in filters:
         for c in convs:
             for b in batches:
-                model = makeModel(f, c, b)
-                modelName = ('W:/Watchdog/Model/paramSweep/f' + str(f).zfill(2)
-                             + '_c' + str(c).zfill(2) + '_b' + str(b).zfill(2)
-                             + '.h5')
-                model.save(modelName)
-
+                model, labels = makeModel(input_data, output_data, f, c, b)
+                modelName = ('W:/Watchdog/Model/paramSweep2/f' + str(f).zfill(2)
+                             + '_c' + str(c).zfill(2) + '_b' + str(b).zfill(2))
+                model.save(modelName + '.h5')
+                with open(modelName + '_labels.pkl', 'wb') as f:
+                    pickle.dump(labels, f, pickle.HIGHEST_PROTOCOL)
+                plt.close('all')
 
 
 if __name__ == '__main__':
