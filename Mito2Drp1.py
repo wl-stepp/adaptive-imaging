@@ -18,6 +18,7 @@ import psutil
 import tensorflow as tf
 from skimage import exposure, morphology, segmentation
 from sklearn.model_selection import train_test_split
+from sklearn.utils import shuffle
 from tensorflow.keras.layers import Activation, Input
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
