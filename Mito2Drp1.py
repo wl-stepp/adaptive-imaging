@@ -51,6 +51,7 @@ def prepareMitoDrp(name='Mito'):
     hf.create_dataset(name, data=input_data1)
     hf.close()
 
+
 def prepareProc(threshold=150):
     data_file = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/' + 'Proc.h5'
     hf = h5py.File(data_file, 'r')
@@ -84,7 +85,6 @@ def prepareProc(threshold=150):
                 output_data[frame] = segmentation.flood_fill(
                     output_data[frame], (output_data.shape[1]-1, y), 0)
 
-
     # output_data = output_data.astype(np.float)
     # output_data = exposure.rescale_intensity(
     #             output_data,
@@ -109,10 +109,14 @@ def prepareProc(threshold=150):
     hf.create_dataset('Proc', data=output_data)
     hf.close()
 
+
 def makeModel(input_data, output_data, nb_filters=32, firstConvSize=5, batch_size=16):
     # batch size for the training data set
     # Import data
     # Changed from the Colab version to load local data
+    print('\n\n***PARAMETERS***\nfilters: ', nb_filters)
+    print('convsize: ', firstConvSize)
+    print('batch: ', batch_size)
     data_path = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/'  # nb: begin with /
     print('data_path : ', data_path, '\n')
 
@@ -120,7 +124,6 @@ def makeModel(input_data, output_data, nb_filters=32, firstConvSize=5, batch_siz
 
     # Split data set into [test] and [train+valid] subsets using sklearn
     # train_test_split function
-
 
     data_set_test_trainvalid_ratio = 0.2
     data_split_state = None
@@ -548,7 +551,7 @@ def main():
     print('\nInput : ', input_data.shape)
     print('Output : \n', output_data.shape)
 
-    filters = [16, 32]  # 8
+    filters = [8, 16, 32]
     convs = [3, 5, 9, 11]
     batches = [8, 16, 32]
     for f in filters:
