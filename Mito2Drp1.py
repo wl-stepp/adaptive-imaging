@@ -29,7 +29,7 @@ from tqdm.keras import TqdmCallback  # Used for Progress bars during training
 
 
 def prepareMitoDrp(name='Mito'):
-    data_file = 'W:/Watchdog/Model/' + name + '.h5'
+    data_file = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/' + name + '.h5'
     hf = h5py.File(data_file, 'r')
     input_data1 = hf.get(name)  # Mito
     input_data1 = np.array(input_data1).astype(np.float)
@@ -43,7 +43,7 @@ def prepareMitoDrp(name='Mito'):
             printProgressBar(frame, input_data1.shape[0], printEnd='\r')
     input_data1 = input_data1.reshape(input_data1.shape[0], 128, 128, 1)
     hf.close()
-    hf = h5py.File('W:/Watchdog/Model/prep_data.h5', 'a')
+    hf = h5py.File('//lebnas1.epfl.ch/microsc125/Watchdog/Model/prep_data.h5', 'a')
     try:
         del hf[name]
     except KeyError:
@@ -52,7 +52,7 @@ def prepareMitoDrp(name='Mito'):
     hf.close()
 
 def prepareProc(threshold=150):
-    data_file = 'W:/Watchdog/Model/' + 'Proc.h5'
+    data_file = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/' + 'Proc.h5'
     hf = h5py.File(data_file, 'r')
     output_data = hf.get('Proc')  # Mito
     # binarize with a certain threshold
@@ -101,7 +101,7 @@ def prepareProc(threshold=150):
             plt.draw()
             plt.pause(1)
     output_data = output_data.reshape(output_data.shape[0], 128, 128, 1)
-    hf = h5py.File('W:/Watchdog/Model/prep_data2.h5', 'a')
+    hf = h5py.File('//lebnas1.epfl.ch/microsc125/Watchdog/Model/prep_data2.h5', 'a')
     try:
         del hf['Proc']
     except KeyError:
@@ -113,7 +113,7 @@ def makeModel(input_data, output_data, nb_filters=32, firstConvSize=5, batch_siz
     # batch size for the training data set
     # Import data
     # Changed from the Colab version to load local data
-    data_path = 'W:/Watchdog/Model/'  # nb: begin with /
+    data_path = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/'  # nb: begin with /
     print('data_path : ', data_path, '\n')
 
     model_name = '/paramSweep2/temp_model'
@@ -530,7 +530,7 @@ def printProgressBar(iteration, total, prefix='', suffix='', decimals=1,
 
 def main():
     print('* Importing data *')
-    data_path = 'W:/Watchdog/Model/'  # nb: begin with /
+    data_path = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/'  # nb: begin with /
     data_filename = data_path + 'prep_data2.h5'  # Mito
     hf = h5py.File(data_filename, 'r')
     input_data1 = hf.get('Mito')
@@ -553,8 +553,8 @@ def main():
         for c in convs:
             for b in batches:
                 model, labels = makeModel(input_data, output_data, f, c, b)
-                modelName = ('W:/Watchdog/Model/paramSweep2/f' + str(f).zfill(2)
-                             + '_c' + str(c).zfill(2) + '_b' + str(b).zfill(2))
+                modelName = ('//lebnas1.epfl.ch/microsc125/Watchdog/Model/paramSweep2/f' +
+                             str(f).zfill(2) + '_c' + str(c).zfill(2) + '_b' + str(b).zfill(2))
                 model.save(modelName + '.h5')
                 with open(modelName + '_labels.pkl', 'wb') as f:
                     pickle.dump(labels, f, pickle.HIGHEST_PROTOCOL)
