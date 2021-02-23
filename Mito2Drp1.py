@@ -561,8 +561,8 @@ def main():
                 modelName = ('//lebnas1.epfl.ch/microsc125/Watchdog/Model/paramSweep2/f' +
                              str(f).zfill(2) + '_c' + str(c).zfill(2) + '_b' + str(b).zfill(2))
                 model.save(modelName + '.h5')
-                with open(modelName + '_labels.pkl', 'wb') as f:
-                    pickle.dump(labels, f, pickle.HIGHEST_PROTOCOL)
+                with open(modelName + '_labels.pkl', 'wb') as fileHandle:
+                    pickle.dump(labels, fileHandle, pickle.HIGHEST_PROTOCOL)
                 plt.close('all')
 
 
