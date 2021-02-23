@@ -146,8 +146,8 @@ def makeModel(input_data, output_data, nb_filters=32, firstConvSize=5, batch_siz
     # Prepare labels that are shuffled the same way that train_test_split will. Save these to
     # know which indices of frames where the test data for this model
     labels = np.arange(0, input_data.shape[0], 1)
-    labels = shuffle(labels, random_state=data_split_state)[0:input_data.shape[0]*
-                                                            data_set_test_trainvalid_ratio]
+    labels = shuffle(labels, random_state=data_split_state)[0:int(input_data.shape[0]*
+                                                            data_set_test_trainvalid_ratio)]
     print('test labels: ', labels)
 
     optimizer_type = Adam(lr=0.5e-3)  # optimisation algorithm: Adam
