@@ -14,7 +14,6 @@ import time
 import h5py  # HDF5 data file management library
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import psutil
 import tensorflow as tf
 from skimage import exposure, morphology, segmentation
