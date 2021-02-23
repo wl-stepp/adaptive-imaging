@@ -430,15 +430,15 @@ def makeModel(input_data, output_data, nb_filters=32, firstConvSize=5, batch_siz
     print('* Evaluating performance of trained network on the unseen dataset *')
     print()
 
-    evaluate_model = model.evaluate(
-        x=input_test, y=output_test, verbose=0,
-        callbacks=[TqdmCallback(verbose=1)])
-    loss_metric = evaluate_model[0]
-    accuracy_metric = evaluate_model[1]
+    # evaluate_model = model.evaluate(
+    #     x=input_test, y=output_test, verbose=0,
+    #     callbacks=[TqdmCallback(verbose=1)])
+    # loss_metric = evaluate_model[0]
+    # accuracy_metric = evaluate_model[1]
 
-    print()
-    print('Accuracy - ' + metrics[0] + ': %0.3f' % accuracy_metric)
-    print('Loss - ' + loss + ': %0.3f' % loss_metric)
+    # print()
+    # print('Accuracy - ' + metrics[0] + ': %0.3f' % accuracy_metric)
+    # print('Loss - ' + loss + ': %0.3f' % loss_metric)
 
     # Save the compiled model to be used later
     print('* Save the Model for later use *')
