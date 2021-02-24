@@ -536,7 +536,8 @@ def printProgressBar(iteration, total, prefix='', suffix='', decimals=1,
 def main():
     print('* Importing data *')
     data_path = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/'  # nb: begin with /
-    data_filename = data_path + 'prep_data.h5'  # Mito
+    collection = 'paramSweep'
+    data_filename = data_path + collection + '/prep_data.h5'  # Mito
     hf = h5py.File(data_filename, 'r')
     input_data1 = hf.get('Mito')
     input_data1 = np.array(input_data1).astype(np.float)
@@ -558,7 +559,7 @@ def main():
         for c in convs:
             for b in batches:
                 model, labels = makeModel(input_data, output_data, f, c, b)
-                modelName = ('//lebnas1.epfl.ch/microsc125/Watchdog/Model/paramSweep/f' +
+                modelName = (data_path + collection + '/f' +
                              str(f).zfill(2) + '_c' + str(c).zfill(2) + '_b' + str(b).zfill(2))
                 model.save(modelName + '.h5')
                 with open(modelName + '_labels.pkl', 'wb') as fileHandle:
