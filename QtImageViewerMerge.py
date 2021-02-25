@@ -86,9 +86,9 @@ class QtImageViewerMerge(QMainWindow):  # GraphicsWindow):
         self.setCentralWidget(self.widget)
         self.glw = pg.GraphicsLayoutWidget()
 
-        layoutBox = QGridLayout(self.widget)
-        layoutBox.setContentsMargins(0, 0, 0, 0)
-        layoutBox.addWidget(self.glw)
+        self.layoutBox = QGridLayout(self.widget)
+        self.layoutBox.setContentsMargins(0, 0, 0, 0)
+        self.layoutBox.addWidget(self.glw)
 
         # Image frame viewer.
         self.viewBox = self.glw.addViewBox()
@@ -161,11 +161,16 @@ class QtImageViewerMerge(QMainWindow):  # GraphicsWindow):
     def resetRanges(self):
         """ reset Ranges when a new stack is loaded in by some GUI """
         for pos in range(self.numChannels):
-            fullRange = [np.min(self.fullImages[pos]), np.max(self.fullImages[pos])]
-            maxRange = fullRange[1]
-            self.saturationSliders[pos].viewBox.setYRange(0, maxRange+10)
-            self.saturationSliders[pos].regions[0].setRegion((0, maxRange))
-            self.imageItems[pos]['ImageItem'].setLevels((0, maxRange))
+            fullImageRange = [np.min(self.fullImages[pos]), np.max(self.fullImages[pos])]
+            maxImage = fullImageRange[1]
+            minImage = fullImageRange[0]
+            self.saturationSliders[pos].viewBox.setYRange(-0.2*maxImage, maxImage*1.2)
+            self.saturationSliders[pos].regions[0].setRegion((-0.1*maxImage, maxImage*1.1))
+            self.imageItems[pos]['ImageItem'].setLevels((minImage, maxImage))
+
+    def resetZoom(self):
+        self.viewBox.setRange(xRange=(0, self.fullImages[-1].shape[0]),
+                              yRange=(0, self.fullImages[-1].shape[1]))
 
     def addImage(self, img=None):
         """ Add an image item/channel on top of the other images that are already present. Do not
@@ -186,6 +191,7 @@ class QtImageViewerMerge(QMainWindow):  # GraphicsWindow):
         if img is not None:
             self.setImage(img, self.numChannels)
         self.numChannels = self.numChannels + 1
+        self.resetZoom()
         return imgItem
 
     def setLUT(self, img, name='hot'):
@@ -465,14 +471,15 @@ def main():
 
         imgItemdrp = viewer.addImage(drp)
         imgItemmito = viewer.addImage(mito)
-
-        viewer.setLUT(imgItemdrp, 'reds')
-        viewer.setLUT(imgItemmito, 'grey')
+        # viewer.setLUT(imgItemdrp, 'reds')
+        # viewer.setLUT(imgItemmito, 'grey')
         # viewer.setImage(drp, 0)
         # viewer.setImage(mito, 1)
         viewer.setImage(drp, 0)
-
+        viewer.saturationSliders[0].viewBox.setYRange(0, 100)
+        viewer.resetRanges()
         viewer2.addImage(mito)
+        viewer2.resetRanges()
 
         win.show()
 

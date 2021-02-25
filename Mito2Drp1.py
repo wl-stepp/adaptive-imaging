@@ -25,7 +25,7 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.python.keras.layers import (BatchNormalization, Conv2D, Conv3D,
                                             MaxPooling2D, MaxPooling3D,
                                             Reshape, UpSampling2D, concatenate)
-from tqdm.keras import TqdmCallback  # Used for Progress bars during training
+from tqdm import tqdm
 
 
 def prepareMitoDrp(name='Mito'):
@@ -33,14 +33,13 @@ def prepareMitoDrp(name='Mito'):
     hf = h5py.File(data_file, 'r')
     input_data1 = hf.get(name)  # Mito
     input_data1 = np.array(input_data1).astype(np.float)
-    for frame in range(input_data1.shape[0]):
+    for frame in tqdm(range(input_data1.shape[0])):
         scalingFactor = np.random.randint(30, 100)/100
         input_data1[frame] = exposure.rescale_intensity(
                     input_data1[frame],
                     (np.min(input_data1[frame]), np.max(input_data1[frame])),
                     out_range=(0, scalingFactor))
-        if not frame % 100:
-            printProgressBar(frame, input_data1.shape[0], printEnd='\r')
+
     input_data1 = input_data1.reshape(input_data1.shape[0], 128, 128, 1)
     hf.close()
     hf = h5py.File('//lebnas1.epfl.ch/microsc125/Watchdog/Model/prep_data.h5', 'a')
@@ -62,14 +61,24 @@ def prepareProc(threshold=150):
     print('* data loaded *')
     output_data = output_data > threshold
     # double dilation to increase minimal spot size
-    for frame in range(output_data.shape[0]):
-        printProgressBar(frame, output_data.shape[0], printEnd='\r')
-        output_data[frame] = morphology.binary_dilation(output_data[frame])
-        output_data[frame] = morphology.binary_erosion(output_data[frame])
-        output_data[frame] = morphology.binary_dilation(output_data[frame])
-        output_data[frame] = morphology.skeletonize(output_data[frame])
-        output_data[frame] = morphology.binary_dilation(output_data[frame])
-        output_data[frame] = morphology.binary_dilation(output_data[frame])
+    for frame in tqdm(range(output_data.shape[0])):
+        mode = 'new'
+        if mode == 'old':
+            output_data[frame] = morphology.binary_dilation(output_data[frame],
+                                                            morphology.square(2))
+            output_data[frame] = morphology.binary_dilation(output_data[frame])
+            output_data[frame] = morphology.skeletonize(output_data[frame])
+            output_data[frame] = morphology.binary_dilation(output_data[frame])
+            output_data[frame] = morphology.binary_dilation(output_data[frame])
+            output_data[frame] = morphology.binary_dilation(output_data[frame])
+            output_data[frame] = morphology.binary_dilation(output_data[frame])
+        else:
+            output_data[frame] = morphology.binary_dilation(output_data[frame],
+                                                            morphology.square(2))
+            output_data[frame] = morphology.binary_dilation(output_data[frame])
+            output_data[frame] = morphology.skeletonize(output_data[frame])
+            output_data[frame] = morphology.binary_dilation(output_data[frame],
+                                                            morphology.disk(6))
 
         # check for something on the border of the image
         for x in range(output_data.shape[1]):
@@ -101,7 +110,7 @@ def prepareProc(threshold=150):
             plt.draw()
             plt.pause(1)
     output_data = output_data.reshape(output_data.shape[0], 128, 128, 1)
-    hf = h5py.File('//lebnas1.epfl.ch/microsc125/Watchdog/Model/prep_data2.h5', 'a')
+    hf = h5py.File('//lebnas1.epfl.ch/microsc125/Watchdog/Model/prep_data3.h5', 'a')
     try:
         del hf['Proc']
     except KeyError:
@@ -503,41 +512,12 @@ def makeModel(input_data, output_data, nb_filters=32, firstConvSize=5, batch_siz
             plt.pause(2)
     return model, labels
 
-def printProgressBar(iteration, total, prefix='', suffix='', decimals=1,
-                     length=100, fill='█', printEnd=None):
-    """
-    Call in a loop to create terminal progress bar
-    @params:
-        iteration   - Required  : current iteration (Int)
-        total       - Required  : total iterations (Int)
-        prefix      - Optional  : prefix string (Str)
-        suffix      - Optional  : suffix string (Str)
-        decimals    - Optional  : positive number of decimals in percent complete (Int)
-        length      - Optional  : character length of bar (Int)
-        fill        - Optional  : bar fill character (Str)
-        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
-    """
-    if printEnd is None:
-        pprocName = psutil.Process(os.getppid()).name()
-        isIDLE = bool(re.fullmatch('pyhtonw.exe', pprocName))
-        if isIDLE:
-            printEnd = '\n'
-        else:
-            printEnd = '\r'
-    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
-    filledLength = int(length * iteration // total)
-    bar = fill * filledLength + '-' * (length - filledLength)
-    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end=printEnd)
-    # Print New Line on Complete
-    if iteration == total:
-        print()
-
 
 def main():
     print('* Importing data *')
     data_path = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/'  # nb: begin with /
-    collection = 'paramSweep'
-    data_filename = data_path + collection + '/prep_data.h5'  # Mito
+    collection = 'paramSweep3'
+    data_filename = data_path + collection + '/prep_data' + collection[-1] + '.h5'  # Mito
     hf = h5py.File(data_filename, 'r')
     input_data1 = hf.get('Mito')
     input_data1 = np.array(input_data1).astype(np.float)
@@ -553,7 +533,7 @@ def main():
     print('Output : \n', output_data.shape)
 
     filters = [8, 16, 32]
-    convs = [3, 5, 9, 11]
+    convs = [3, 5, 7, 9]
     batches = [8, 16, 32]
     for f in filters:
         for c in convs:
