@@ -169,8 +169,9 @@ class QtImageViewerMerge(QMainWindow):  # GraphicsWindow):
             self.imageItems[pos]['ImageItem'].setLevels((minImage, maxImage))
 
     def resetZoom(self):
-        self.viewBox.setRange(xRange=(0, self.fullImages[-1].shape[0]),
-                              yRange=(0, self.fullImages[-1].shape[1]))
+        if self.fullImages[-1] is not None:
+            self.viewBox.setRange(xRange=(0, self.fullImages[-1].shape[0]),
+                                  yRange=(0, self.fullImages[-1].shape[1]))
 
     def addImage(self, img=None):
         """ Add an image item/channel on top of the other images that are already present. Do not

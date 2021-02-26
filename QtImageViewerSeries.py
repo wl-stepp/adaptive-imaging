@@ -246,7 +246,7 @@ def main():
     """ Method to test the Viewer in a QBoxLayout with 1 and 2 channels"""
     app = QApplication(sys.argv)
     viewer = QtImageViewerSeries()
-    fname = ('W:/Watchdog/Model/prep_data3.h5')
+    fname = ('W:/Watchdog/Model/paramSweep3/prep_data3.h5')
     # fname = ('C:/Users/stepp/Documents/02_Raw/SmartMito/__short.tif')
     viewer.loadSeries(fname)
     viewer.show()
