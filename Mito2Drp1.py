@@ -110,7 +110,7 @@ def prepareProc(threshold=150):
             plt.draw()
             plt.pause(1)
     output_data = output_data.reshape(output_data.shape[0], 128, 128, 1)
-    hf = h5py.File('//lebnas1.epfl.ch/microsc125/Watchdog/Model/prep_data3.h5', 'a')
+    hf = h5py.File('//lebnas1.epfl.ch/microsc125/Watchdog/Model/prep_data4.h5', 'a')
     try:
         del hf['Proc']
     except KeyError:
@@ -129,7 +129,7 @@ def makeModel(input_data, output_data, nb_filters=32, firstConvSize=5, batch_siz
     data_path = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/'  # nb: begin with /
     print('data_path : ', data_path, '\n')
 
-    model_name = '/paramSweep/temp_model'
+    model_name = '/paramSweep4/temp_model'
 
     # Split data set into [test] and [train+valid] subsets using sklearn
     # train_test_split function
@@ -516,7 +516,7 @@ def makeModel(input_data, output_data, nb_filters=32, firstConvSize=5, batch_siz
 def main():
     print('* Importing data *')
     data_path = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/'  # nb: begin with /
-    collection = 'paramSweep3'
+    collection = 'paramSweep4'
     data_filename = data_path + collection + '/prep_data' + collection[-1] + '.h5'  # Mito
     hf = h5py.File(data_filename, 'r')
     input_data1 = hf.get('Mito')
