@@ -17,7 +17,7 @@ from tqdm import tqdm
 
 from NNfeeder import prepareNNImages
 
-DataPath = 'W:/Watchdog/Model/'
+DataPath = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/'
 Colors = {
     'ats':  (210/255, 42/255, 38/255),
     'slow': (2/255, 53/255, 62/255),
@@ -26,8 +26,8 @@ Colors = {
 
 
 def main(collection='paramSweep'):
-    dataPath = 'W:/Watchdog/Model/'
-    inputDataPath = dataPath + collection + '/prep_data' + collection[-1] + '.h5'
+
+    inputDataPath = DataPath + collection + '/prep_data' + collection[-1] + '.h5'
     hf = h5py.File(inputDataPath, 'r')
     input1 = hf.get('Mito')  # Mito
     input1 = np.array(input1).astype(np.float)
