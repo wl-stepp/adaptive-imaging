@@ -40,8 +40,13 @@ def main(collection='paramSweep'):
     outputDataFull = np.array(outputData).astype(bool)
     hf.close()
 
-    iSIMdataPath = 'C:/Users/stepp/Documents/02_Raw/SmartMito/180420_130.tif'
-    iSIMdata = io.imread(iSIMdataPath)
+    try:
+        iSIMdataPath = 'C:/Users/stepp/Documents/02_Raw/SmartMito/180420_130.tif'
+        iSIMdata = io.imread(iSIMdataPath)
+    except FileNotFoundError:
+        iSIMdataPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/180420_130.tif'
+        iSIMdata = io.imread(iSIMdataPath)
+
 
 
     # Make the ouput data a little bigger, to not penalize to much on the correct location
