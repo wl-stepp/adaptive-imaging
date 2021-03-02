@@ -28,7 +28,10 @@ def prepareNNImages(mitoFull, drpFull, model):
     pixelCalib = 56  # nm per pixel
     sig = 121.5/81  # in pixel
     resizeParam = pixelCalib/81  # no unit
-    nnImageSize = model.layers[0].input_shape[0][1]
+    try:
+        nnImageSize = model.layers[0].input_shape[0][1]
+    except AttributeError:
+        nnImageSize = model
     positions = None
 
     # Preprocess the images

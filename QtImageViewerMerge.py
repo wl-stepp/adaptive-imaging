@@ -162,7 +162,7 @@ class QtImageViewerMerge(QMainWindow):  # GraphicsWindow):
         """ reset Ranges when a new stack is loaded in by some GUI """
         for pos in range(self.numChannels):
             fullImageRange = [np.min(self.fullImages[pos]), np.max(self.fullImages[pos])]
-            maxImage = fullImageRange[1]
+            maxImage = np.max([fullImageRange[1], 1])
             minImage = fullImageRange[0]
             self.saturationSliders[pos].viewBox.setYRange(-0.2*maxImage, maxImage*1.2)
             self.saturationSliders[pos].regions[0].setRegion((-0.1*maxImage, maxImage*1.1))
