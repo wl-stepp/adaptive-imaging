@@ -4,6 +4,8 @@ import h5py  # HDF5 data file management library
 import matplotlib
 
 matplotlib.use('Qt5Agg')
+from ast import literal_eval
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -46,8 +48,8 @@ def main(collection='paramSweep'):
     except FileNotFoundError:
         iSIMdataPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/180420_130.tif'
         iSIMdata = io.imread(iSIMdataPath)
-
-
+    iSIMdataPath2 = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/180420_111.tif'
+    iSIMdata2 = io.imread(iSIMdataPath2)
 
     # Make the ouput data a little bigger, to not penalize to much on the correct location
     # for frame in range(outputData.shape[0]):
@@ -61,7 +63,7 @@ def main(collection='paramSweep'):
                                  'totalPredict', 'predictVariance', 'maskPredictThresh',
                                  'maskPredict',
                                  'truePositive', 'truePositiveThresh', 'falsePositive',
-                                 'falsePositiveThresh', 'iSIMoutput'])
+                                 'falsePositiveThresh', 'iSIMoutput', 'iSIMoutput2'])
 
     # pand.loc[pand.shape[0]] = [modelName, f, c, b, totalTruth, totalPredict,
     #                             maskPredictThresh,
@@ -101,6 +103,11 @@ def main(collection='paramSweep'):
                     iSIMdataprep = prepareNNImages(iSIMdata[frame], iSIMdata[frame+1], None)
                     iSIMoutput.append(np.max(model.predict(iSIMdataprep[0])))
 
+                iSIMoutput2 = []
+                for frame in tqdm(range(0, iSIMdata2.shape[0], 2)):
+                    iSIMdataprep = prepareNNImages(iSIMdata2[frame], iSIMdata2[frame+1], None)
+                    iSIMoutput2.append(np.max(model.predict(iSIMdataprep[0])))
+
                 # Mask the prediction with the ground truth
                 # Take the maximum, or what we take as input for ATS
                 maxOutput = list()
@@ -127,9 +134,10 @@ def main(collection='paramSweep'):
                 pand.loc[pand.shape[0]] = [modelName, f, c, b, totalTruth, totalPredict,
                                            predictVariance, maskPredictThresh,
                                            maskPredict, truePositive, truePositiveThresh,
-                                           falsePositive, falsePositiveThresh, iSIMoutput]
+                                           falsePositive, falsePositiveThresh, iSIMoutput,
+                                           iSIMoutput2]
                 print(pand)
-    pand.to_csv(os.path.join(DataPath, collection, 'evaluation.csv'))
+    pand.to_pickle(os.path.join(DataPath, collection, 'evaluation.pkl'))
 
     return
 
@@ -156,7 +164,6 @@ class TableWindow(QtWidgets.QMainWindow):
     def addLine(self, fig):
         canvas = FigureCanvas(fig)
         canvas.draw()
-        canvas
         self.widget.layout().addWidget(canvas)
 
     def done(self):
@@ -167,44 +174,57 @@ def visualizeDecision(collections=['paramSweep6', 'paramSweep7']):
 
     # Make line for one model
     modelName = 'f08_c03_b08'
-    model = os.path.join(DataPath, collection, 'f08_c03_b08.h5')
-    evalFilePath = os.path.join(DataPath, collection, 'evaluation.csv')
+    model = os.path.join(DataPath, collections[0], 'f08_c03_b08.h5')
+    evalFilePath = os.path.join(DataPath, collections[0], 'evaluation.csv')
     pand = pd.read_csv(evalFilePath)
     print(pand)
-
+    pand = pand.sort_values('truePositiveThresh', ascending=False)
     # Make a window that allows for esay adding of plot lines
     win = TableWindow()
 
-    modelData = pand.loc[pand['model'] == 'f08_c03_b08']
-    fig, axes = plt.subplots(ncols=4, nrows=1, figsize=(16, 3))
+    for modelName in pand['model'][:10]:
+        modelData = pand.loc[pand['model'] == modelName]
+        fig, axes = plt.subplots(ncols=4, nrows=1, figsize=(16, 3))
 
-    axes[0].barh([0, 1],
-                 [modelData['truePositiveThresh'][0], modelData['falsePositiveThresh'][0]],
-                 1,
-                 color=[Colors['slow'], Colors['ats']],
-                 zorder = 10)
+        axes[0].barh([0, 1],
+                    [modelData['truePositiveThresh'].item(),
+                     modelData['falsePositiveThresh'].item()],
+                    1,
+                    color=[Colors['slow'], Colors['ats']],
+                    zorder = 10)
+        axes[0].set_ylabel(modelName, rotation=0, labelpad=80, va="center")
 
+        axes[1].barh([0,1],
+                    [modelData['truePositive'].item(), modelData['falsePositive'].item()],
+                    1,
+                    color=[Colors['slow'], Colors['ats']],
+                    alpha=0.5,
+                    zorder = 10)
 
-    axes[1].barh([0,1],
-                [modelData['truePositive'][0], modelData['falsePositive'][0]],
-                1,
-                color=[Colors['slow'], Colors['ats']],
-                alpha=0.5,
-                zorder = 10)
+        for i in [0, 1]:
+            axes[i].set_xlim((0, 1.01))
+            axes[i].set_xticks([0.05, 0.1, 0.15, 0.7, 0.8, 0.9, 1])
+            axes[i].set_xticklabels(['', '', '', '', '', '', ''])
+            axes[i].set_yticks([])
+            axes[i].set_frame_on(False)
+            axes[i].grid(axis='x', zorder=1)
+            axes[i].xaxis.set_tick_params(length=0)
 
-    for i in [0, 1]:
-        axes[i].set_xlim((0, 1))
-        axes[i].set_xticks([0.05, 0.1, 0.15, 0.7, 0.8, 0.9])
-        axes[i].set_xticklabels(['', '', '', '', '', ''])
-        axes[i].set_yticks([])
-        axes[i].set_frame_on(False)
-        axes[i].grid(axis='x', zorder=1)
+        axes[2].plot(literal_eval(modelData['iSIMoutput'].item()),
+                     color=Colors['slow'])
+        axes[2].set_frame_on(False)
+        axes[2].set_ylim((0, 1))
+        axes[2].set_yticks([])
+        axes[2].set_xticks([])
+        greyVal = 0.75
+        axes[2].axhline(1, color=(greyVal, greyVal, greyVal))
+        axes[2].axhline(0, color=(greyVal, greyVal, greyVal))
+        axes[2].grid(axis='y', zorder=1)
+        axes[2].xaxis.set_major_locator(plt.NullLocator())
+        axes[2].xaxis.set_major_formatter(plt.NullFormatter())
 
-    axes[2].plot([1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1],
-                 color=Colors['slow'])
+        win.addLine(fig)
 
-
-    win.addLine(fig)
     win.done()
 
 
@@ -268,7 +288,7 @@ def visualize(collection='paramSweep'):
 
 
 if __name__ == '__main__':
-    collection = 'paramSweep5'
-    # visualizeDecision(['paramSweep5'])
+    # collection = 'paramSweep5'
+    visualizeDecision(['paramSweep5'])
     main(collection)
     # visualize(collection)
