@@ -78,8 +78,8 @@ def main(collection='paramSweep'):
                              '_c' + str(c).zfill(2) +
                              '_b' + str(b).zfill(2))
 
-                modelPath = os.path.join(dataPath, collection, (modelName + '.h5'))
-                testSetPath = os.path.join(dataPath, collection, (modelName + '_labels.pkl'))
+                modelPath = os.path.join(DataPath, collection, (modelName + '.h5'))
+                testSetPath = os.path.join(DataPath, collection, (modelName + '_labels.pkl'))
 
                 model = keras.models.load_model(modelPath, compile=True)
 
@@ -129,7 +129,7 @@ def main(collection='paramSweep'):
                                            maskPredict, truePositive, truePositiveThresh,
                                            falsePositive, falsePositiveThresh, iSIMoutput]
                 print(pand)
-    pand.to_csv(os.path.join(dataPath, collection, 'evaluation.csv'))
+    pand.to_csv(os.path.join(DataPath, collection, 'evaluation.csv'))
 
     return
 
