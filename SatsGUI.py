@@ -144,7 +144,6 @@ class SatsGUI(QWidget):
         self.elapsed = loadElapsedTime(folder, progress, app)
         self.elapsed.sort()
         self.elapsed = np.array(self.elapsed[0::2])/1000
-
         self.delay = loadiSIMmetadata(folder)
         self.nnData = loadNNData(folder)
 

@@ -33,7 +33,7 @@ def main():
 
     # Comment if only taking one stack
     allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/'
-                         '180420_drp_mito_Dora/**/*MMStack*_combine*.ome.tif', recursive=True)
+                         '180420_drp_mito_Dora/**/*MMStack*_combine.ome.tif', recursive=True)
 
     # allFiles = glob.glob('W:/iSIMstorage/Users/Willi/160622_caulobacter/'
     #                      '160622_CB15N_WT/SIM images/Series*[0-9].ome.tif')
@@ -44,7 +44,8 @@ def main():
         # nnFile = file[:-8] + '_nn.ome.tif'
         sample = re.split('sample', file)[1][0]
         cell = re.split('cell_', file)[1][0]
-        atsFolder = os.path.dirname(file) + '/s' + str(sample).zfill(2) + '_c' + str(cell).zfill(2) + '_ATS'
+        atsFolder = (os.path.dirname(file) + '/s' + str(sample).zfill(2) + '_c' +
+            str(cell).zfill(2) + '_ATS2')
 
         # atsFolder = file[:-4] + '_ATS_ffmodel'
         # if not os.path.isfile(nnFile):
@@ -52,6 +53,7 @@ def main():
             stacks.append(file)
     stacks = sorted(stacks)
     print('\n'.join(stacks))
+    stacks = ['C:/Users/stepp/Documents/02_Raw/SmartMito/sample1_cell_3.tif']
     atsOnStack(stacks)
 
 
@@ -63,7 +65,7 @@ def atsOnStack(stacks: list):
     #                          USER SETTINGS
     #   see end of file for setting the folders/files to do the simulation on
     #
-    modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/model_Willi.h5'
+    modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/paramSweep5/f32_c07_b08.h5'
     # Should we get the settings from the central settings file?
     extSettings = False
     dataOrder = 0  # 0 for drp/foci first, 1 for mito/structure first
@@ -102,7 +104,8 @@ def atsOnStack(stacks: list):
         # newFolder = re.split(r'.tif', stack)[0] + '_ATS_ffmodel'
         sample = re.split('sample', stack)[1][0]
         cell = re.split('cell_', stack)[1][0]
-        newFolder = os.path.dirname(stack) + '/s' + str(sample).zfill(2) + '_c' + str(cell).zfill(2) + '_ATS'
+        newFolder = (os.path.dirname(stack) + '/s' + str(sample).zfill(2) + '_c' +
+                     str(cell).zfill(2) + '_ATS2')
         if os.path.exists(newFolder):
             shutil.rmtree(newFolder)
         os.mkdir(newFolder)
@@ -122,8 +125,15 @@ def atsOnStack(stacks: list):
 
         # dataOrder = dataOrderMetadata(stack)
         dataOrder = dataOrderMetadata(stack, write=False)
-        drpOrig, mitoOrig, drpTimes, mitoTimes = loadTifStack(stack, outputElapsed=True)
+        drpOrig, mitoOrig, drpTimes, mitoTimes = loadTifStack(stack, order=dataOrder,
+                                                              outputElapsed=True)
         print('stack loaded')
+
+        # check if there is timing in the times or just frames and if adjust for timing in ms
+        diff = np.diff(drpTimes)
+        if np.max(diff) < 3:
+            drpTimes = np.multiply(drpTimes, 500)
+            mitoTimes = np.multiply(mitoTimes, 500)
 
         time = drpTimes[0]
         frame = 0
@@ -278,7 +288,6 @@ def atsOnStack(stacks: list):
             print(('  -> ' + str(frame)), end=' ')
             print(('fast frames:' + str(fastCount)), end='\r')
 
-
             if outputData[-1] == 0:
                 fileHandle = open("ATSSim_logging.txt", "a")
                 fileHandle.write('\n outputData was 0 at frame')
@@ -288,8 +297,6 @@ def atsOnStack(stacks: list):
 
         file.close()
         print('\ntotal fast frames: ', fastCum, '\n\n')
-
-
 
 
 if __name__ == '__main__':

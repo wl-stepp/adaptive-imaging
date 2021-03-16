@@ -110,7 +110,7 @@ def prepareProc(threshold=150):
             plt.draw()
             plt.pause(1)
     output_data = output_data.reshape(output_data.shape[0], 128, 128, 1)
-    hf = h5py.File('//lebnas1.epfl.ch/microsc125/Watchdog/Model/prep_data7.h5', 'a')
+    hf = h5py.File('//lebnas1.epfl.ch/microsc125/Watchdog/Model/prep_data9.h5', 'a')
     try:
         del hf['Proc']
     except KeyError:
@@ -321,6 +321,8 @@ def makeModel(input_data, output_data, nb_filters=32, firstConvSize=5, batch_siz
         down1 = Activation('relu')(down1)
         down1_pool = MaxPooling2D((2, 2), strides=(2, 2))(down1)
 
+        # Down2 and Up2 are not really used in the moment, because they are skipped, as down1_pool
+        # is used in the center layer as input and center is used in up1 as input, not up2
         down2 = Conv2D(nb_filters*2, (3, 3), padding='same')(down1_pool)
         down2 = BatchNormalization()(down2)
         down2 = Activation('relu')(down2)
@@ -516,7 +518,7 @@ def makeModel(input_data, output_data, nb_filters=32, firstConvSize=5, batch_siz
 def main():
     print('* Importing data *')
     data_path = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/'  # nb: begin with /
-    collection = 'paramSweep6'
+    collection = 'paramSweep9'
     data_filename = data_path + collection + '/prep_data' + collection[-1] + '.h5'  # Mito
     hf = h5py.File(data_filename, 'r')
     input_data1 = hf.get('Mito')

@@ -12,16 +12,16 @@ import threading
 from pathlib import Path
 from tkinter import messagebox
 
+import h5py
 import imageio
 import matplotlib.pyplot as plt
 import numpy as np
-import psutil
 import tifffile
 import xmltodict
 from matplotlib.widgets import RectangleSelector
 from skimage import io
+from tqdm import tqdm
 
-import SmartMicro.NNfeeder
 from SmartMicro import ImageTiles, NNfeeder
 
 
@@ -29,16 +29,20 @@ def loadiSIMmetadata(folder):
     """  Load the information written by matlab about the generated DAQ signals for all in folder
     """
     delay = []
-    for name in sorted(glob.glob(folder + '/iSIMmetadata*.txt')):
+    fileList = sorted(glob.glob(folder + '/iSIMmetadata*.txt'))
+    for name in fileList:
         txtFile = open(name)
         data = txtFile.readline().split('\t')
-        data = [float(i) for i in data]
-        txtFile.close()
-        # set minimum cycle time
-        if data[1] == 0:
-            data[1] = 0.2
-        numFrames = int(data[2])
-        delay = np.append(delay, np.ones(numFrames)*data[1])
+        try:
+            data = [float(i) for i in data]
+            txtFile.close()
+            # set minimum cycle time
+            if data[1] == 0:
+                data[1] = 0.2
+            numFrames = int(data[2])
+            delay = np.append(delay, np.ones(numFrames)*data[1])
+        except:
+            print('no data in ', name)
     return delay
 
 
@@ -96,6 +100,75 @@ def resaveNN(folder):
         img = tifffile.imread(filePath)
         newFile = filePath[:-5] + '_fiji.tiff'
         tifffile.imsave(newFile, img.astype(np.uint8))
+
+
+def resaveH5(file, newFile=None):
+    """ Resave an h5 file that was not compressed into a compressed format """
+    if newFile is None:
+        fileHandle = h5py.File(file, 'a')
+        newFileHandle = h5py.File(file[:-3] + '_temp.h5', 'w')
+    else:
+        fileHandle = h5py.File(file, 'r')
+        newFileHandle = h5py.File(newFile, 'w')
+
+    for item in fileHandle.keys():
+        oldData = np.array(fileHandle.get(item))
+        if newFile is None:
+            del fileHandle[item]
+        newFileHandle.create_dataset(item, data=oldData, compression='gzip')
+
+    fileHandle.close()
+    newFileHandle.close()
+    os.remove(file)
+    os.rename(file[:-3] + '_temp.h5', file)
+
+
+def makeOuputTxt(folder):
+    fileList = glob.glob(folder + '/img_*_nn.tiff')
+    txtFile = (folder + '/output.txt')
+    for file in tqdm(fileList):
+        nn = tifffile.imread(file)
+        frameNum = int(file[-17:-8])
+        output = np.max(nn)
+        file = open(txtFile, 'a')
+        file.write('%d, %d\n' % (frameNum, output))
+        file.close()
+
+
+def makePrepImages(folder, model):
+    """ Prepare the _prep images to enable virtual mode on an ATS folder """
+    fileList = glob.glob(folder + '/img_*z000.tif')
+    baseName = '/img_channel000_position000_time'
+    for frame in tqdm(range(int(len(fileList)/2))):
+        mitoFile = (folder + baseName + str((frame*2 + 1)).zfill(9) + '_z000.tif')
+        mitoFilePrep = (folder + baseName + str((frame*2 + 1)).zfill(9) + '_z000_prep.tif')
+        drpFile =  (folder + baseName + str((frame*2)).zfill(9) + '_z000.tif')
+        drpFilePrep = (folder + baseName + str((frame*2)).zfill(9) + '_z000_prep.tif')
+
+        mito = tifffile.imread(mitoFile)
+        drp = tifffile.imread(drpFile)
+
+        inputData, positions = NNfeeder.prepareNNImages(mito, drp, model)
+        if model.layers[0].input_shape[0][1] is None:
+            # Just copy the full frame if a full frame network was used
+            mitoDataFull = inputData[0, :, :, 0, 0]
+            drpDataFull = inputData[0, :, :, 1, 0]
+        else:
+            # Stitch the tiles made back together if model needs it
+            i = 0
+            st0 = positions['stitch']
+            st1 = None if st0 == 0 else -st0
+            mitoDataFull = np.zeros(positions['px'][-1][-1], positions['px'][-1][-2])
+            drpDataFull = np.zeros_like(mitoDataFull)
+            for pos in positions['px']:
+                mitoDataFull[pos[0]+st0:pos[2]-st0, pos[1]+st0:pos[3]-st0] = \
+                    inputData[i, st0:st1, st0:st1, 0]
+                drpDataFull[pos[0]+st0:pos[2]-st0, pos[1]+st0:pos[3]-st0] = \
+                    inputData[i, st0:st1, st0:st1, 1]
+                i += 1
+
+        tifffile.imwrite(mitoFilePrep, mitoDataFull)
+        tifffile.imwrite(drpFilePrep, drpDataFull)
 
 
 def loadTifFolder(folder, resizeParam=1, order=0, progress=None, cropSquare=True) -> np.ndarray:
@@ -279,7 +352,7 @@ def loadTifStackElapsed(file, numFrames=None, skipFrames=0):
 def savegif(stack, times, fps):
     """ Save a gif that uses the right frame duration read from the files. This can be sped up
     using the fps option"""
-    filePath = 'C:/Users/stepp/Documents/02_Raw/SmartMito/test.gif'
+    filePath = 'C:/Users/stepp/Documents/02_Raw/SmartMito/presentation.gif'
     times = np.divide(times, fps).tolist()
     print(stack.shape)
     imageio.mimsave(filePath, stack, duration=times)
@@ -322,18 +395,18 @@ def extractTiffStack(file, frame, target):
                      metadata={'Info': ijInfo['Info']})  # pylint: disable=E1136
 
 
-def calculateNNforStack(file, model=None):
+def calculateNNforStack(file, model=None, nnPath=None):
     """ calculate neural network output for all frames in a stack and write to new stack """
     # dataOrder = 1  # 0 for drp/foci first, 1 for mito/structure first
     if model is None:
         from tensorflow import keras
         modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/model_Dora.h5'
-        modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/test_model3.h5'
+        modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/paramSweep5/f32_c07_b08.h5'
         model = keras.models.load_model(modelPath, compile=True)
 
     # drpOrig, mitoOrig, elapsed, _ = loadTifStack(file, dataOrder,  outputElapsed=True)
-
-    nnPath = file[:-8] + '_nn_ffmodel.ome.tif'
+    if nnPath is None:
+        nnPath = file[:-8] + '_nn_ffbinary.ome.tif'
 
     # Prepare the Metadata for the new file by extracting the ome-metadata
     with tifffile.TiffFile(file, fastij=False) as tif:
@@ -356,9 +429,8 @@ def calculateNNforStack(file, model=None):
     else:
         nnSize = positions['px'][-1][-1]
 
-    nnImage = np.zeros((int(drpOrig.shape[0]), nnSize, nnSize), dtype=np.uint8)
-    for frame in range(drpOrig.shape[0]):
-        printProgressBar(frame, drpOrig.shape[0], printEnd='\n')
+    nnImage = np.zeros((int(drpOrig.shape[0]), nnSize, nnSize))
+    for frame in tqdm(range(drpOrig.shape[0])):
         inputData, positions = NNfeeder.prepareNNImages(mitoOrig[frame, :, :],
                                                         drpOrig[frame, :, :], model)
         outputPredict = model.predict_on_batch(inputData)
@@ -404,7 +476,7 @@ def dataOrderMetadata(file, dataOrder=None, write=True):
             mdInfo = xmltodict.parse(reader.ome_metadata)
             mdInfo['OME']['Image']['Description']['@dataOrder'] = dataOrder
             print('dataOrder was already there overwritten')
-        except (TypeError, KeyError) as error:
+        except (TypeError, KeyError) as _:
             try:
                 mdInfo['OME']['Image']['Description'] = {'@dataOrder': dataOrder}
                 print('Struct for dataOrder generated')
@@ -514,10 +586,17 @@ def defineCropRect(file):
 
 def main():
     """ Main method calculating a nn stack for a set of old Mito/drp stacks """
+    # from tensorflow import keras
+    folder = 'W:/Watchdog/bacteria/210312_dualColor/_15'
+    # model = keras.models.load_model('W:/Watchdog/Model/model_Willi.h5', compile=False)
+    # makePrepImages(folder, model)
+    # loadiSIMmetadata(folder)
+    makeOuputTxt(folder)
+    return
 
-    allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/'
-                         '180420_DRP_mito_Dora/**/*MMStack*lzw.ome.tif', recursive=True)
-    mainPath = 'W:/iSIMstorage/Users/Willi/160622_caulobacter/160622_CB15N_WT/SIM images'
+    # allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/'
+    #                      '180420_DRP_mito_Dora/**/*MMStack*lzw.ome.tif', recursive=True)
+    # mainPath = 'W:/iSIMstorage/Users/Willi/160622_caulobacter/160622_CB15N_WT/SIM images'
     mainPath = 'W:/iSIMstorage/Users/Willi/180420_drp_mito_Dora/**'
     files = glob.glob(mainPath + '/*MMStack*_combine.ome.tif')
 
@@ -527,91 +606,15 @@ def main():
     for file in files:
         print(file)
         outFile = Path('W:/iSIMstorage/Users/Willi/180420_drp_mito_Dora'
-                       + file.name[0:-8] + '_nn_ffmodel.ome.tif')
+                       + file.name[0:-8] + '_nn_ffbinary.ome.tif')
         # cropOMETiff(file, outFile=outFile, cropFrame=None, cropRect=True)
         dataOrderMetadata(file.as_posix())
-        calculateNNforStack(file.as_posix())
+        calculateNNforStack(file.as_posix(), nnPath=outFile)
 
-    # with tifffile.TiffFile(file) as tif:
-        # mdInfo = xmltodict.parse(tif.ome_metadata)
-        # print(mdInfo['OME']['Image']['Description'])
-
-    # Just take the files that have not been analysed so far
-    # files = []
-    # for file in allFiles:
-    #     # nnFile = file[:-8] + '_nn.ome.tif'
-    #     atsFolder = file[:-4] + '_ATS'
-    #     # if not os.path.isfile(nnFile):
-    #     if not os.path.isdir(atsFolder):
-    #         files.append(file)
-
-    # print('\n'.join(files))
-    # for file in files:
-        # calculateNNforStack(file)
-
-    # target = 'C:/Users/stepp/Documents/05_Software/Analysis/test.ome.tiff'
-    # extractTiffStack(file ,11 , target)
-
-    # with tifffile.TiffFile(target, fastij=False) as tif:
-    #     mdInfo = tif.ome_metadata
-    #     mdInfoDict = xmltodict.parse(mdInfo)
-    #     # ijInfoDict = json.loads(ijInfo)
-    #     print('THIS IS WHAT WE GET OUT')
-    #     print(mdInfoDict['OME']['Image']['Pixels']['Plane']['@DeltaT'])
-
-    #     ijInfo = tif.shaped_metadata[0]
-    #     ijInfoDict = json.loads(ijInfo['Info'])
-    #     print(ijInfoDict['ElapsedTime-ms'])
-
-    # from skimage import exposure
-    # folder = (
-    #     "C:/Users/stepp/Documents/02_Raw/SmartMito/microM_test/"
-    #     "201208_cell_Int0s_30pc_488_50pc_561_band_5")
-
-    # stack1 = loadTifFolder(folder, 512/741, 0)[0]
-    # times = loadElapsedTime(folder)
-    # times = times[0::2]
-    # times = (times - np.min(times))/1000
-    # times = np.diff(times).tolist()
-
-    # print(len(times))
-    # stack1 = exposure.rescale_intensity(
-    #         stack1, (np.min(stack1), np.max(stack1)), out_range=(0, 255))
-    # stack1 = stack1.astype('uint8')
-    # savegif(stack1, times, 10)
-
-    # print('Done')
-
-
-def printProgressBar(iteration, total, prefix='', suffix='', decimals=1,
-                     length=100, fill='█', printEnd=None):
-    """
-    Call in a loop to create terminal progress bar
-    @params:
-        iteration   - Required  : current iteration (Int)
-        total       - Required  : total iterations (Int)
-        prefix      - Optional  : prefix string (Str)
-        suffix      - Optional  : suffix string (Str)
-        decimals    - Optional  : positive number of decimals in percent complete (Int)
-        length      - Optional  : character length of bar (Int)
-        fill        - Optional  : bar fill character (Str)
-        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
-    """
-    if printEnd is None:
-        pprocName = psutil.Process(os.getppid()).name()
-        isIDLE = bool(re.fullmatch('pyhtonw.exe', pprocName))
-        print('checking shell:  ', isIDLE)
-        if isIDLE:
-            printEnd = '\n'
-        else:
-            printEnd = '\r'
-    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
-    filledLength = int(length * iteration // total)
-    bar = fill * filledLength + '-' * (length - filledLength)
-    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end=printEnd)
-    # Print New Line on Complete
-    if iteration == total:
-        print()
+    # for i in range(7, 10):
+    #     file = 'W:/Watchdog/Model/paramSweep' + str(i) + '/prep_data' + str(i) + '.h5'
+    #     print(file)
+    #     resaveH5(file)
 
 
 if __name__ == '__main__':

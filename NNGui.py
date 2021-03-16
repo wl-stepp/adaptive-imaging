@@ -494,8 +494,9 @@ class LoadingThread(QObject):
         if self.model.layers[0].input_shape[0][1] is None:
             # If the network is for full shape images, be sure that shape is multiple of 4
             self.postSize = self.postSize - self.postSize % 4
-        if self.mode == 'stack':
-            self.nnOutput = np.zeros((self.frameNum, self.postSize, self.postSize))
+        # if self.mode == 'stack':
+        self.nnOutput = np.zeros((self.frameNum, self.postSize, self.postSize))
+
         self.mitoDataFull = np.zeros_like(self.nnOutput)
         self.drpDataFull = np.zeros_like(self.nnOutput)
         self.nnRecalculated = np.zeros(self.frameNum)
@@ -537,7 +538,6 @@ class LoadingThread(QObject):
                     self.drpDataFull[frame, pos[0]+st0:pos[2]-st0, pos[1]+st0:pos[3]-st0] = \
                         inputData[i, st0:st1, st0:st1, 1]
                     i += 1
-
 
             # Get the output data from the nn channel and its position
             self.outputData.append(np.max(self.nnOutput[frame, :, :]))

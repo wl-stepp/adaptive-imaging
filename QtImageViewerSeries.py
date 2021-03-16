@@ -1,15 +1,31 @@
+""" Fork of ImageViewerMerge that can be used to see a series and also have a slider to see all
+frames. The slider looks better than QSlider and you can use the mouseWheel to scroll through the
+frames if the mouse is located above the slider.
+    """
+
 import sys
 
 import h5py
 import numpy as np
 import pyqtgraph as pg
 from PyQt5 import QtGui
-from PyQt5.QtCore import QRectF, Qt, QTimer, pyqtSignal
-from PyQt5.QtWidgets import (QApplication, QGridLayout, QGroupBox,
-                             QInputDialog, QPushButton, QSlider, QWidget)
+from PyQt5.QtCore import QRectF, QTimer, pyqtSignal
+from PyQt5.QtWidgets import QApplication, QGridLayout, QInputDialog, QWidget
 from skimage import io
 
 from SmartMicro.QtImageViewerMerge import QtImageViewerMerge
+
+
+def main():
+    """ Method to test the Viewer in a QBoxLayout with 1 and 2 channels"""
+    app = QApplication(sys.argv)
+    viewer = QtImageViewerSeries()
+    fname = ('W:/Watchdog/Model/ParamSweep9/prep_data9.h5')
+    # fname = ('W:/Watchdog/Model/Proc.h5')
+    # fname = ('C:/Users/stepp/Documents/02_Raw/SmartMito/__short.tif')
+    viewer.loadSeries(fname)
+    viewer.show()
+    sys.exit(app.exec_())
 
 
 class QtImageViewerSeries(QWidget):
@@ -29,35 +45,41 @@ class QtImageViewerSeries(QWidget):
         self.grid.addWidget(self.viewer, 0, 0)
         self.grid.addWidget(self.slider, 1, 0)
 
-        #get the timer ready for the slider
+        # get the timer ready for the slider
         self.timer = QTimer()
         self.timer.timeout.connect(self.onTimer)
         self.timer.setInterval(20)
 
         self.series = None
 
-    def newSlider(self, ev):
+    def newSlider(self, event):
+        """ ??? """
         print(self.region.getRegion())
-        print(ev)
+        print(event)
 
     def onTimer(self, i=None):
+        """Set the current frame if timer is running. Also accesible programmatically to set a
+        certain frame by setting the i input
+        """
         if i is None:
             i = int(self.slider.position)
         else:
             i = int(np.round(i))
+        print(i)
         self.viewer.setImage(self.series[i])
 
     def loadSeries(self, filePath):
+        """ Load anything that skimage imread can load as a series or a .h5 file """
         if filePath[-3:] == '.h5':
-            hf = h5py.File(filePath, 'r')
-            if len(hf.keys()) > 1:
-                item, ok = QInputDialog.getItem(
-                    self, "select Series", "series", hf.keys(), 0, False)
+            fileHandle = h5py.File(filePath, 'r')
+            if len(fileHandle.keys()) > 1:
+                item, _ = QInputDialog.getItem(
+                    self, "select Series", "series", fileHandle.keys(), 0, False)
             else:
-                item = hf.keys()[0]
-            self.series = hf.get(item)
+                item = fileHandle.keys()[0]
+            self.series = fileHandle.get(item)
             self.series = np.array(self.series).astype('float')
-
+            fileHandle.close()
         else:
             self.series = io.imread(filePath)
         self.viewer.addImage(self.series[0])
@@ -65,6 +87,7 @@ class QtImageViewerSeries(QWidget):
         self.viewer.resetRanges()
         self.slider.setSliderRange([-1, self.series.shape[0]-1])
         self.viewer.resetZoom()
+
 
     def startTimer(self):
         """ start Timer when slider is pressed """
@@ -118,8 +141,12 @@ class QNiceSlider(pg.GraphicsLayoutWidget):
         self.sliderRange = [-1, 100]
         self.setSliderRange(self.sliderRange)
 
-    def setSliderRange(self, sliderRange=[-1, 100]):
-        self.sliderRange = sliderRange
+    def setSliderRange(self, sliderRange=None):
+        """ Set the Range of the whole slider """
+        if sliderRange is None:
+            self.sliderRange = [-1, 100]
+        else:
+            self.sliderRange = sliderRange
         self.viewB.setXRange(sliderRange[0], sliderRange[1])
         self.button.setsliderRange(sliderRange)
         self.button.width = (sliderRange[1]-sliderRange[0])/100
@@ -140,14 +167,15 @@ class QNiceSlider(pg.GraphicsLayoutWidget):
         self.sliderChanged.emit(self.position)
 
     def buttonChange(self, pos):
+        """  Notify if the Slider changed"""
         self.position = pos
         self.sliderChanged.emit(self.position)
 
     def sliderBgClicked(self, pos):
+        """ Notify if the background of the slider was clicked to move the sliderButton there """
         self.position = pos
         self.sliderChanged.emit(self.position)
         self.button.updatePosition(self.position)
-
 
     class SliderBackground(pg.GraphicsObject):
         """ The Background of the slider. """
@@ -160,23 +188,27 @@ class QNiceSlider(pg.GraphicsLayoutWidget):
             self.railHeight = 0.6
             self.boundingR = QRectF(-1, (1-self.railHeight)/2, 100, self.railHeight)
 
-        def paint(self, p, *args):
-            p.setBrush(self.currentBrush)
-            p.setPen(pg.mkPen(None))
-            p.drawRect(self.boundingR)
+        def paint(self, painter, *_):
+            """ Reimplement the painter function """
+            painter.setBrush(self.currentBrush)
+            painter.setPen(pg.mkPen(None))
+            painter.drawRect(self.boundingR)
 
         def setSliderBackground(self, rect):
+            """ Set the background if sliderRange changed for example"""
             self.boundingR.setLeft(rect[0])
             self.boundingR.setRight(rect[1])
             self.prepareGeometryChange()
 
         def boundingRect(self):
-            br = self.boundingR
-            br = br.normalized()
-            return br
+            """ The bounding rectangle of the background """
+            rectangle = self.boundingR
+            rectangle = rectangle.normalized()
+            return rectangle
 
-        def mousePressEvent(self, ev):
-            self.sliderClicked.emit(ev.pos().x())
+        def mousePressEvent(self, event):
+            """ Transmit where the background was clicked """
+            self.sliderClicked.emit(event.pos().x())
 
     class SliderButton(pg.GraphicsObject):
         """ The button for the slider. """
@@ -194,63 +226,60 @@ class QNiceSlider(pg.GraphicsLayoutWidget):
             self.orientation = orientation
             self.sliderRange = [-1, 100]
 
-        def setsliderRange(self, range):
-            self.sliderRange = range
+        def setsliderRange(self, sliderRange):
+            """ Set the internal sliderRange so the button knows where it is allowed to go"""
+            self.sliderRange = sliderRange
 
         def boundingRect(self, span=None):
-            br = QRectF(self.viewRect())
+            """ The rectangle that is the button """
+            rectangle = QRectF(self.viewRect())
             if span is None:
                 rng = self.span
             else:
                 rng = span
 
             if self.orientation == 'vertical':
-                br.setLeft(rng[0])
-                br.setRight(rng[1])
-                length = br.height()
-                br.setBottom(0)
-                br.setTop(1)
+                rectangle.setLeft(rng[0])
+                rectangle.setRight(rng[1])
+                length = rectangle.height()
+                rectangle.setBottom(0)
+                rectangle.setTop(1)
             else:
-                br.setTop(rng[0])
-                br.setBottom(rng[1])
-                length = br.width()
-                br.setRight(br.left() + length * self.span[1])
-                br.setLeft(br.left() + length * self.span[0])
+                rectangle.setTop(rng[0])
+                rectangle.setBottom(rng[1])
+                length = rectangle.width()
+                rectangle.setRight(rectangle.left() + length * self.span[1])
+                rectangle.setLeft(rectangle.left() + length * self.span[0])
 
-            br = br.normalized()
-            return br
+            rectangle = rectangle.normalized()
+            return rectangle
 
-        def paint(self, p, *args):
-            p.setBrush(self.currentBrush)
-            p.setPen(pg.mkPen(None))
-            p.drawRect(self.boundingRect())
+        def paint(self, painter, *_):
+            """ Redefine the paint event """
+            painter.setBrush(self.currentBrush)
+            painter.setPen(pg.mkPen(None))
+            painter.drawRect(self.boundingRect())
 
         def updatePosition(self, pos):
-            width = self.span[1] - self.span[0]
+            """ Prepare the paint to know where to paint """
             self.span = [pos-self.width/2, pos+self.width/2]
             self.prepareGeometryChange()
             self.buttonChanged.emit(pos)
 
-        def mouseMoveEvent(self, ev):
-            if self.sliderRange[1] > ev.lastPos().x() > self.sliderRange[0]:
-                self.updatePosition(ev.lastPos().x())
+        def mouseMoveEvent(self, event):
+            """ Make the button follow the mouse if in the correct range """
+            if self.sliderRange[1] > event.lastPos().x() > self.sliderRange[0]:
+                self.updatePosition(event.lastPos().x())
 
-        def mousePressEvent(self, ev):
+        def mousePressEvent(self, _):
+            """ Transmit button press to the main slider class """
             self.buttonPressed.emit()
 
-        def mouseReleaseEvent(self, v):
+        def mouseReleaseEvent(self, _):
+            """ Transmit button release to the main slider class """
             self.buttonReleased.emit()
 
 
-def main():
-    """ Method to test the Viewer in a QBoxLayout with 1 and 2 channels"""
-    app = QApplication(sys.argv)
-    viewer = QtImageViewerSeries()
-    fname = ('W:/Watchdog/Model/paramSweep5/prep_data5.h5')
-    # fname = ('C:/Users/stepp/Documents/02_Raw/SmartMito/__short.tif')
-    viewer.loadSeries(fname)
-    viewer.show()
-    sys.exit(app.exec_())
 
 if __name__ == '__main__':
     main()

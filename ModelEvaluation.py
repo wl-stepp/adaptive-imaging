@@ -1,23 +1,20 @@
 import os
 
 import h5py  # HDF5 data file management library
-import matplotlib
-
-matplotlib.use('Qt5Agg')
-from ast import literal_eval
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 from matplotlib.backends.backend_qt5agg import \
     FigureCanvasQTAgg as FigureCanvas
-from PyQt5 import QtCore, QtWidgets
+from PyQt5 import QtWidgets
 from skimage import io
 from tensorflow import keras
 from tqdm import tqdm
 
 from NNfeeder import prepareNNImages
+
+plt.switch_backend('Agg')
 
 DataPath = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/'
 Colors = {
@@ -28,7 +25,7 @@ Colors = {
 
 
 def main(collection='paramSweep'):
-
+    """ Main function of the module that prepares all the data for later plotting """
     inputDataPath = DataPath + collection + '/prep_data' + collection[-1] + '.h5'
     hf = h5py.File(inputDataPath, 'r')
     input1 = hf.get('Mito')  # Mito
@@ -148,58 +145,96 @@ class TableWindow(QtWidgets.QMainWindow):
         self.qapp = QtWidgets.QApplication([])
         QtWidgets.QMainWindow.__init__(self)
         self.widget = QtWidgets.QWidget()
+        # self.widget.setWidgetResizable(True)
         self.setCentralWidget(self.widget)
         self.widget.setLayout(QtWidgets.QVBoxLayout())
         self.widget.layout().setContentsMargins(0, 0, 0, 0)
         self.widget.layout().setSpacing(0)
 
-        self.headerBox = QtWidgets.QGroupBox()
-        gridBox = QtWidgets.QGridLayout(self.headerBox)
-        gridBox.addWidget(QtWidgets.QLabel('True/Flase Positives thresholded'), 0, 1)
-        gridBox.addWidget(QtWidgets.QLabel('True/Flase Positives'), 0, 2)
+        self.table = QtWidgets.QScrollArea()
+        self.tableWidget = QtWidgets.QWidget()
+        self.tableWidget.setLayout(QtWidgets.QVBoxLayout())
+        self.tableWidget.layout().setContentsMargins(0, 0, 0, 0)
+        self.tableWidget.layout().setSpacing(0)
+        self.table.setWidget(self.tableWidget)
+        self.table.setWidgetResizable(True)
+        self.table.setFixedWidth(1500)
 
-        self.widget.layout().addWidget(self.headerBox)
+        self.headerLine = QtWidgets.QWidget()
+        self.headerLine.setLayout(QtWidgets.QVBoxLayout())
+        self.headerLine.setFixedHeight(50)
+
+        self.widget.layout().addWidget(self.headerLine)
+        self.widget.layout().addWidget(self.table)
+
         self.lines = 0
+
+    def addHeader(self, fig):
+
+        canvas = FigureCanvas(fig)
+        self.headerLine.layout().addWidget(canvas)
 
     def addLine(self, fig):
         canvas = FigureCanvas(fig)
         canvas.draw()
-        self.widget.layout().addWidget(canvas)
+        self.tableWidget.layout().addWidget(canvas)
+        self.tableWidget.layout().addStretch()
+        self.lines = self.lines + 1
 
     def done(self):
+        self.setGeometry(300, 100, 1500, 1000)
+        self.tableWidget.setFixedHeight(70*self.lines)
         self.show()
         exit(self.qapp.exec_())
 
-def visualizeDecision(collections=['paramSweep6', 'paramSweep7']):
+
+def visualizeDecision(collections):
 
     # Make line for one model
-    modelName = 'f08_c03_b08'
-    model = os.path.join(DataPath, collections[0], 'f08_c03_b08.h5')
-    evalFilePath = os.path.join(DataPath, collections[0], 'evaluation.csv')
-    pand = pd.read_csv(evalFilePath)
+    for collection in collections:
+        evalFilePath = os.path.join(DataPath, collection, 'evaluation.pkl')
+        newPand = pd.read_pickle(evalFilePath)
+        newPand['collection'] = collection
+        if collection == collections[0]:
+            pand = newPand
+        else:
+            pand = pd.concat([pand, newPand])
     print(pand)
     pand = pand.sort_values('truePositiveThresh', ascending=False)
     # Make a window that allows for esay adding of plot lines
     win = TableWindow()
+    fig, axes = plt.subplots(ncols=4, nrows=1, figsize=(16, 3))
+    fig.subplots_adjust(bottom=-1, top=0)
+    axes[0].set_title('Positives Thresholded')
+    axes[1].set_title('Positives')
+    axes[2].set_title('High Activity')
+    axes[3].set_title('Low Activity')
+    for ax in axes:
+        ax.set_yticks([])
+    win.addHeader(fig)
 
-    for modelName in pand['model'][:10]:
-        modelData = pand.loc[pand['model'] == modelName]
+    for modelData in pand.iterrows():
+        modelData = modelData[1]
+        modelName = modelData['model']
+        collection = modelData['collection']
+
         fig, axes = plt.subplots(ncols=4, nrows=1, figsize=(16, 3))
 
         axes[0].barh([0, 1],
-                    [modelData['truePositiveThresh'].item(),
-                     modelData['falsePositiveThresh'].item()],
-                    1,
-                    color=[Colors['slow'], Colors['ats']],
-                    zorder = 10)
-        axes[0].set_ylabel(modelName, rotation=0, labelpad=80, va="center")
+                     [modelData['truePositiveThresh'],
+                      modelData['falsePositiveThresh']],
+                     1,
+                     color=[Colors['slow'], Colors['ats']],
+                     zorder=10)
+        axes[0].set_ylabel(modelName, rotation=0, labelpad=80, va='center')
+        plt.text(0.92, 0.5, collection, transform=plt.gcf().transFigure, va='center')
 
-        axes[1].barh([0,1],
-                    [modelData['truePositive'].item(), modelData['falsePositive'].item()],
-                    1,
-                    color=[Colors['slow'], Colors['ats']],
-                    alpha=0.5,
-                    zorder = 10)
+        axes[1].barh([0, 1],
+                     [modelData['truePositive'], modelData['falsePositive']],
+                     1,
+                     color=[Colors['slow'], Colors['ats']],
+                     alpha=0.5,
+                     zorder=10)
 
         for i in [0, 1]:
             axes[i].set_xlim((0, 1.01))
@@ -210,24 +245,27 @@ def visualizeDecision(collections=['paramSweep6', 'paramSweep7']):
             axes[i].grid(axis='x', zorder=1)
             axes[i].xaxis.set_tick_params(length=0)
 
-        axes[2].plot(literal_eval(modelData['iSIMoutput'].item()),
+        axes[2].plot(modelData['iSIMoutput'],
                      color=Colors['slow'])
-        axes[2].set_frame_on(False)
-        axes[2].set_ylim((0, 1))
-        axes[2].set_yticks([])
-        axes[2].set_xticks([])
-        greyVal = 0.75
-        axes[2].axhline(1, color=(greyVal, greyVal, greyVal))
-        axes[2].axhline(0, color=(greyVal, greyVal, greyVal))
-        axes[2].grid(axis='y', zorder=1)
-        axes[2].xaxis.set_major_locator(plt.NullLocator())
-        axes[2].xaxis.set_major_formatter(plt.NullFormatter())
+
+        axes[3].plot(modelData['iSIMoutput2'],
+                     color=Colors['slow'])
+
+        for i in [2, 3]:
+            axes[i].set_frame_on(False)
+            axes[i].set_ylim((0, 1))
+            axes[i].set_yticks([])
+            axes[i].set_xticks([])
+            greyVal = 0.75
+            axes[i].axhline(1, color=(greyVal, greyVal, greyVal))
+            axes[i].axhline(0, color=(greyVal, greyVal, greyVal))
+            axes[i].grid(axis='y', zorder=1)
+            axes[i].xaxis.set_major_locator(plt.NullLocator())
+            axes[i].xaxis.set_major_formatter(plt.NullFormatter())
 
         win.addLine(fig)
 
     win.done()
-
-
 
 
 def visualize(collection='paramSweep'):
@@ -243,42 +281,49 @@ def visualize(collection='paramSweep'):
 
     axesList = []
 
-    fig1 = plt.figure(figsize=(20,10))
+    fig1 = plt.figure(figsize=(20, 10))
     ax = fig1.add_subplot(331)
     axesList.append(ax)
-    pand.sort_values('filters').plot(x='filters', y='truePositiveThresh', kind='bar', ax=ax, zorder = 10)
+    pand.sort_values('filters').plot(x='filters', y='truePositiveThresh', kind='bar', ax=ax,
+                                     zorder=10)
     ax.set_title('Sorted by filters')
     plt.ylabel('True Positive Thresholded')
     ax = fig1.add_subplot(332)
     axesList.append(ax)
-    pand.sort_values('convs').plot(x='convs', y='truePositiveThresh', kind='bar', ax=ax, zorder = 10)
+    pand.sort_values('convs').plot(x='convs', y='truePositiveThresh', kind='bar', ax=ax,
+                                   zorder=10)
     ax.set_title('Sorted by firstConv')
     ax = fig1.add_subplot(333)
     axesList.append(ax)
-    pand.sort_values('batchSize').plot(x='batchSize', y='truePositiveThresh', kind='bar', ax=ax, zorder = 10)
+    pand.sort_values('batchSize').plot(x='batchSize', y='truePositiveThresh', kind='bar', ax=ax,
+                                       zorder=10)
     ax.set_title('Sorted by batchSize')
 
     ax = fig1.add_subplot(334)
     axesList.append(ax)
-    pand.sort_values('filters').plot(x='filters', y='totalPredict', kind='bar', ax=ax, zorder = 10)
+    pand.sort_values('filters').plot(x='filters', y='totalPredict', kind='bar', ax=ax, zorder=10)
     plt.ylabel('Total Prediction')
     ax = fig1.add_subplot(335)
     axesList.append(ax)
-    pand.sort_values('convs').plot(x='convs', y='totalPredict', kind='bar', ax=ax, zorder = 10)
+    pand.sort_values('convs').plot(x='convs', y='totalPredict', kind='bar', ax=ax, zorder=10)
     ax = fig1.add_subplot(336)
     axesList.append(ax)
-    pand.sort_values('batchSize').plot(x='batchSize', y='totalPredict', kind='bar', ax=ax, zorder = 10)
+    pand.sort_values('batchSize').plot(x='batchSize', y='totalPredict', kind='bar', ax=ax,
+                                       zorder=10)
 
     ax = fig1.add_subplot(337)
     axesList.append(ax)
-    pand.sort_values('filters').plot(x='filters', y='falsePositiveThresh', kind='bar', ax=ax, zorder = 10)
+    pand.sort_values('filters').plot(x='filters', y='falsePositiveThresh', kind='bar', ax=ax,
+                                     zorder=10)
     plt.ylabel('False Positive Thresholded')
     ax = fig1.add_subplot(338)
     axesList.append(ax)
-    pand.sort_values('convs').plot(x='convs', y='falsePositiveThresh', kind='bar', ax=ax, zorder = 10)
+    pand.sort_values('convs').plot(x='convs', y='falsePositiveThresh', kind='bar', ax=ax,
+                                   zorder=10)
     ax = fig1.add_subplot(339)
     axesList.append(ax)
-    pand.sort_values('batchSize').plot(x='batchSize', y='falsePositiveThresh', kind='bar', ax=ax, zorder = 10)
+    pand.sort_values('batchSize').plot(x='batchSize', y='falsePositiveThresh', kind='bar', ax=ax,
+                                       zorder=10)
 
     for ax in axesList:
         ax.get_legend().remove()
@@ -286,9 +331,8 @@ def visualize(collection='paramSweep'):
     plt.show()
 
 
-
 if __name__ == '__main__':
-    # collection = 'paramSweep5'
-    visualizeDecision(['paramSweep5'])
-    main(collection)
-    # visualize(collection)
+    coll = 'paramSweep8'
+    visualizeDecision(['paramSweep5', 'paramSweep6', 'paramSweep7','paramSweep8', 'paramSweep9'])
+    # main(coll)
+    # visualize(coll)

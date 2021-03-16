@@ -63,7 +63,10 @@ class NetworkWatchdog(QWidget):
 
         # Read settings from the json file depending on which computer we are on
         with open('./ATS_settings.json') as file:
-            self.settings = json.load(file)[os.environ['COMPUTERNAME'].lower()]
+            settings = json.load(file)
+
+        self.settings = settings[os.environ['COMPUTERNAME'].lower()]
+        self.ATSsettings = settings
 
         # Setting for the watchdogs
         patterns = ["*.tif"]
@@ -99,8 +102,10 @@ class NetworkWatchdog(QWidget):
         self.viewerOutput = pg.PlotWidget()
         self.outputPlot = self.viewerOutput.plot()
         pen = pg.mkPen(color='#FF0000', style=Qt.DashLine)
-        self.thrLine1 = pg.InfiniteLine(pos=90, angle=0, pen=pen)
-        self.thrLine2 = pg.InfiniteLine(pos=70, angle=0, pen=pen)
+        self.thrLine1 = pg.InfiniteLine(
+            pos=self.ATSsettings['upperThreshold'], angle=0, pen=pen)
+        self.thrLine2 = pg.InfiniteLine(
+            pos=self.ATSsettings['lowerThreshold'], angle=0, pen=pen)
         self.viewerOutput.addItem(self.thrLine1)
         self.viewerOutput.addItem(self.thrLine2)
 
