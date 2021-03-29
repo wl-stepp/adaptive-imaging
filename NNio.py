@@ -158,7 +158,7 @@ def makePrepImages(folder, model):
             i = 0
             st0 = positions['stitch']
             st1 = None if st0 == 0 else -st0
-            mitoDataFull = np.zeros(positions['px'][-1][-1], positions['px'][-1][-2])
+            mitoDataFull = np.zeros((positions['px'][-1][-1], positions['px'][-1][-2]))
             drpDataFull = np.zeros_like(mitoDataFull)
             for pos in positions['px']:
                 mitoDataFull[pos[0]+st0:pos[2]-st0, pos[1]+st0:pos[3]-st0] = \
@@ -586,12 +586,12 @@ def defineCropRect(file):
 
 def main():
     """ Main method calculating a nn stack for a set of old Mito/drp stacks """
-    # from tensorflow import keras
-    folder = 'W:/Watchdog/bacteria/210312_dualColor/_15'
-    # model = keras.models.load_model('W:/Watchdog/Model/model_Willi.h5', compile=False)
-    # makePrepImages(folder, model)
-    # loadiSIMmetadata(folder)
-    makeOuputTxt(folder)
+    from tensorflow import keras
+    folder = 'W:/Watchdog/bacteria/210317_dualColor/FOV_3/Default'
+    model = keras.models.load_model('W:/Watchdog/Model/model_Dora.h5', compile=False)
+    makePrepImages(folder, model)
+    loadiSIMmetadata(folder)
+    # makePrepImages(folder)
     return
 
     # allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/'

@@ -163,7 +163,7 @@ class NNGui(QWidget):
 
         self.frameSlider.sliderPressed.connect(self.startTimer)
         self.frameSlider.sliderReleased.connect(self.stopTimer)
-
+        self.frameSlider.valueChanged.connect(self.onSlider)
         # init variables
         self.fileList = [None]*3
         self.mode = None
@@ -313,6 +313,12 @@ class NNGui(QWidget):
             orderStr = 'order: Mito first'
         self.setLogString('Set ' + orderStr)
         self.orderButton.setText(orderStr)
+
+    def onSlider(self):
+        """ Call onTimer if the timer is not active but the value of the slider changed anyway.
+        This is especially the case, if using the mouse wheel to scroll the slider."""
+        if not self.timer.isActive():
+            self.onTimer()
 
     def onTimer(self, i=None):
         """ Reset the data in the GUI on the timer when button or slider is pressed """
