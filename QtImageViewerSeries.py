@@ -20,9 +20,11 @@ def main():
     """ Method to test the Viewer in a QBoxLayout with 1 and 2 channels"""
     app = QApplication(sys.argv)
     viewer = QtImageViewerSeries()
-    fname = ('W:/Watchdog/Model/ParamSweep9/prep_data9.h5')
+    fname = ('\\lebnas1.epfl.ch\microsc125\Watchdog\Model\Proc.h5')
     # fname = ('W:/Watchdog/Model/Proc.h5')
     # fname = ('C:/Users/stepp/Documents/02_Raw/SmartMito/__short.tif')
+    viewer.loadSeries(fname)
+    viewer.loadSeries(fname)
     viewer.loadSeries(fname)
     viewer.show()
     sys.exit(app.exec_())
@@ -66,7 +68,8 @@ class QtImageViewerSeries(QWidget):
         else:
             i = int(np.round(i))
         print(i)
-        self.viewer.setImage(self.series[i])
+        for channel in range(self.series.shape[3]):
+            self.viewer.setImage(self.series[i, :, :, channel-1], channel-1)
 
     def loadSeries(self, filePath):
         """ Load anything that skimage imread can load as a series or a .h5 file """
@@ -77,12 +80,20 @@ class QtImageViewerSeries(QWidget):
                     self, "select Series", "series", fileHandle.keys(), 0, False)
             else:
                 item = fileHandle.keys()[0]
-            self.series = fileHandle.get(item)
-            self.series = np.array(self.series).astype('float')
+            thisSeries = fileHandle.get(item)
+            if self.series is None:
+                self.series = np.array(thisSeries).astype('float')
+            else:
+                self.series = np.concatenate((self.series, np.array(thisSeries).astype('float')),
+                                             axis=3)
             fileHandle.close()
+            print(self.series.shape)
         else:
-            self.series = io.imread(filePath)
-        self.viewer.addImage(self.series[0])
+            if self.series is None:
+                self.series = io.imread(filePath)
+            else:
+                self.series = np.concatenate((self.series, io.imread(filePath)), axis=2)
+        self.viewer.addImage(self.series[0, :, :, self.series.shape[-1]-1])
         self.viewer.rangeChanged()
         self.viewer.resetRanges()
         self.slider.setSliderRange([-1, self.series.shape[0]-1])
