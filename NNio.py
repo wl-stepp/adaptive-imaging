@@ -42,7 +42,8 @@ def loadiSIMmetadata(folder):
             numFrames = int(data[2])
             delay = np.append(delay, np.ones(numFrames)*data[1])
         except:
-            print('no data in ', name)
+            # This means that delay was > 240 and an empty frame was added
+            delay[-1] = delay[-1] + 240
     return delay
 
 
@@ -200,24 +201,51 @@ def loadTifFolder(folder, resizeParam=1, order=0, progress=None, cropSquare=True
     frame = 0
     if progress is not None:
         progress.setRange(0, numFrames*2)
+    # Check if there is data in this folder that has channels
+    channelMode = False
+    for file in fileList:
+        print(file)
+        if re.findall(r'.*channel001.*', file):
+            channelMode = True
+            print('Channel Mode')
+            break
+
     for filePath in fileList:
         splitStr = re.split(r'img_channel\d+_position\d+_time', os.path.basename(filePath))
         splitStr = re.split(r'_z\d+', splitStr[1])
         frameNum = int(splitStr[0])
+
         if splitStr[1] == '_prep.tif':
             continue
 
-        if not frameNum % 2:
-            # odd
-            stack1[frame] = io.imread(filePath)
-            nnPath = filePath[:-8] + 'nn.tiff'
-            try:
-                stackNN[frame] = io.imread(nnPath)
-            except FileNotFoundError:
-                pass
+        if channelMode:
+            splitStr = re.split(r'img_channel', os.path.basename(filePath))
+            splitStr = re.split(r'_position\d+_time\d+_z\d+', splitStr[1])
+            channelNum = int(splitStr[0])
+            print(frameNum)
+            print(channelNum)
+            if not channelNum % 2:
+                stack1[frameNum] = io.imread(filePath)
+                nnPath = filePath[:-8] + 'nn.tiff'
+                try:
+                    stackNN[frameNum] = io.imread(nnPath)
+                except FileNotFoundError:
+                    pass
+            else:
+                stack2[frameNum] = io.imread(filePath)
+                frame = frame + 1
         else:
-            stack2[frame] = io.imread(filePath)
-            frame = frame + 1
+            if not frameNum % 2:
+                # odd
+                stack1[frame] = io.imread(filePath)
+                nnPath = filePath[:-8] + 'nn.tiff'
+                try:
+                    stackNN[frame] = io.imread(nnPath)
+                except FileNotFoundError:
+                    pass
+            else:
+                stack2[frame] = io.imread(filePath)
+                frame = frame + 1
 
         # Progress the bar if available
         # if progress is not None:

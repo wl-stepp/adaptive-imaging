@@ -192,7 +192,10 @@ class SatsGUI(QWidget):
 
         elif self.inc == 4:
             # self.plot.plot(self.elapsed, self.delay[0:len(self.elapsed)]*150)
-            self.nnframes = ((self.nnData[:, 0] - 1) / 2).astype(np.uint16)
+            if (self.nnData[1, 0] - self.nnData[0, 0]) > 1:
+                self.nnframes = ((self.nnData[:, 0] - 1) / 2).astype(np.uint16)
+            else:
+                self.nnframes = (self.nnData[:, 0]).astype(np.uint16)
             self.nntimes = self.elapsed[self.nnframes]
             self.nnline.setData(self.nntimes, self.nnData[:, 1])
             self.scatter.setData(self.nntimes, self.nnData[:, 1])
