@@ -3,10 +3,8 @@ Module that implements an interface for viewing and analysing adaptive temporal 
 data that was generated using the iSIM.
 """
 
-import os
 import pickle
 import sys
-from tkinter import filedialog
 
 import numpy as np
 import pyqtgraph as pg

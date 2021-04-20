@@ -41,7 +41,7 @@ def loadiSIMmetadata(folder):
                 data[1] = 0.2
             numFrames = int(data[2])
             delay = np.append(delay, np.ones(numFrames)*data[1])
-        except:
+        except ValueError:
             # This means that delay was > 240 and an empty frame was added
             delay[-1] = delay[-1] + 240
     return delay
@@ -129,12 +129,14 @@ def resaveH5(file, newFile=None):
 
 
 def makeOuputTxt(folder):
+    """ function that will make an output.txt as NetworkWatchdog would for a folder that already
+    has the neural network images in it."""
     fileList = glob.glob(folder + '/img_*_nn.tiff')
     txtFile = (folder + '/output.txt')
     for file in tqdm(fileList):
-        nn = tifffile.imread(file)
+        nnImage = tifffile.imread(file)
         frameNum = int(file[-17:-8])
-        output = np.max(nn)
+        output = np.max(nnImage)
         file = open(txtFile, 'a')
         file.write('%d, %d\n' % (frameNum, output))
         file.close()
@@ -147,7 +149,7 @@ def makePrepImages(folder, model):
     for frame in tqdm(range(int(len(fileList)/2))):
         mitoFile = (folder + baseName + str((frame*2 + 1)).zfill(9) + '_z000.tif')
         mitoFilePrep = (folder + baseName + str((frame*2 + 1)).zfill(9) + '_z000_prep.tif')
-        drpFile =  (folder + baseName + str((frame*2)).zfill(9) + '_z000.tif')
+        drpFile = (folder + baseName + str((frame*2)).zfill(9) + '_z000.tif')
         drpFilePrep = (folder + baseName + str((frame*2)).zfill(9) + '_z000_prep.tif')
 
         mito = tifffile.imread(mitoFile)
@@ -208,7 +210,6 @@ def loadTifFolder(folder, resizeParam=1, order=0, progress=None, cropSquare=True
     # Check if there is data in this folder that has channels
     channelMode = False
     for file in fileList:
-        print(file)
         if re.findall(r'.*channel001.*', file):
             channelMode = True
             print('Channel Mode')
@@ -226,8 +227,6 @@ def loadTifFolder(folder, resizeParam=1, order=0, progress=None, cropSquare=True
             splitStr = re.split(r'img_channel', os.path.basename(filePath))
             splitStr = re.split(r'_position\d+_time\d+_z\d+', splitStr[1])
             channelNum = int(splitStr[0])
-            print(frameNum)
-            print(channelNum)
             if not channelNum % 2:
                 stack1[frameNum] = io.imread(filePath)
                 nnPath = filePath[:-8] + 'nn.tiff'
@@ -624,24 +623,23 @@ def main():
     makePrepImages(folder, model)
     loadiSIMmetadata(folder)
     # makePrepImages(folder)
-    return
 
     # allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/'
     #                      '180420_DRP_mito_Dora/**/*MMStack*lzw.ome.tif', recursive=True)
     # mainPath = 'W:/iSIMstorage/Users/Willi/160622_caulobacter/160622_CB15N_WT/SIM images'
-    mainPath = 'W:/iSIMstorage/Users/Willi/180420_drp_mito_Dora/**'
-    files = glob.glob(mainPath + '/*MMStack*_combine.ome.tif')
+    # mainPath = 'W:/iSIMstorage/Users/Willi/180420_drp_mito_Dora/**'
+    # files = glob.glob(mainPath + '/*MMStack*_combine.ome.tif')
 
-    print('\n'.join(files))
-    files = [Path(file) for file in files]
+    # print('\n'.join(files))
+    # files = [Path(file) for file in files]
 
-    for file in files:
-        print(file)
-        outFile = Path('W:/iSIMstorage/Users/Willi/180420_drp_mito_Dora'
-                       + file.name[0:-8] + '_nn_ffbinary.ome.tif')
-        # cropOMETiff(file, outFile=outFile, cropFrame=None, cropRect=True)
-        dataOrderMetadata(file.as_posix())
-        calculateNNforStack(file.as_posix(), nnPath=outFile)
+    # for file in files:
+    #     print(file)
+    #     outFile = Path('W:/iSIMstorage/Users/Willi/180420_drp_mito_Dora'
+    #                    + file.name[0:-8] + '_nn_ffbinary.ome.tif')
+    #     # cropOMETiff(file, outFile=outFile, cropFrame=None, cropRect=True)
+    #     dataOrderMetadata(file.as_posix())
+    #     calculateNNforStack(file.as_posix(), nnPath=outFile)
 
     # for i in range(7, 10):
     #     file = 'W:/Watchdog/Model/paramSweep' + str(i) + '/prep_data' + str(i) + '.h5'

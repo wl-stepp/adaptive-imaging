@@ -412,6 +412,7 @@ class LoadingThread(QObject):
         self.mitoDataFull = None
         self.drpDataFull = None
         self.nnRecalculated = None
+        self.elapsed = None
         self.postSize = None
         self.frameNum = None
         self.maxPos = []

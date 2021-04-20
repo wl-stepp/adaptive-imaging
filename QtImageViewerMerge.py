@@ -470,8 +470,8 @@ def main():
         grid.addWidget(viewer, 0, 0)
         grid.addWidget(viewer2, 0, 1)
 
-        imgItemdrp = viewer.addImage(drp)
-        imgItemmito = viewer.addImage(mito)
+        # imgItemdrp = viewer.addImage(drp)
+        # imgItemmito = viewer.addImage(mito)
         # viewer.setLUT(imgItemdrp, 'reds')
         # viewer.setLUT(imgItemmito, 'grey')
         # viewer.setImage(drp, 0)
@@ -481,7 +481,7 @@ def main():
         viewer.resetRanges()
         viewer2.addImage(mito)
         viewer2.resetRanges()
-        viewer.cross.setPosition([(100,100)])
+        viewer.cross.setPosition([(100, 100)])
         win.show()
 
     sys.exit(app.exec_())
