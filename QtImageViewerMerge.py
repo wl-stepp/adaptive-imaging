@@ -53,7 +53,7 @@ class CrossItem(pg.GraphicsObject):
         the ViewBox for example to ensure always the same apparent size. """
         size = 5
         painter = QPainter(self.picture)
-        painter.setPen(pg.mkPen(color=self.color))
+        painter.setPen(pg.mkPen(color=self.color, width=2))
         painter.setBrush(pg.mkBrush(color=self.color))
         painter.drawLine(pos[0]-size, pos[1]-size, pos[0]+size, pos[1]+size)
         painter.drawLine(pos[0]+size, pos[1]-size, pos[0]-size, pos[1]+size)
@@ -94,7 +94,7 @@ class QtImageViewerMerge(QMainWindow):  # GraphicsWindow):
         self.viewBox = self.glw.addViewBox()
         self.viewBox.setAspectLocked()
         self.viewBox.invertY()
-        self.cross = CrossItem(QRectF(0, 0, 1, 1))
+        self.cross = CrossItem(QRectF(0, 0, 1, 1), color='#02CFBB')
         self.viewBox.addItem(self.cross)
 
         # add a Menu on top that can be toggled with a button
@@ -481,7 +481,7 @@ def main():
         viewer.resetRanges()
         viewer2.addImage(mito)
         viewer2.resetRanges()
-
+        viewer.cross.setPosition([(100,100)])
         win.show()
 
     sys.exit(app.exec_())

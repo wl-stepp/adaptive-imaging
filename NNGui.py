@@ -551,6 +551,14 @@ class LoadingThread(QObject):
             self.change_progress.emit(frame)
             # QApplication.processEvents()
 
+        # Check if there is an output.txt in this folder, if not write it.
+        txtFile = os.path.join(self.folder, 'output.txt')
+        if not os.path.isfile(txtFile) and self.mode == 'folder':
+            file = open(txtFile, 'w+')
+            for frameNum, output in enumerate(self.outputData):
+                file.write('%d, %d\n' % (frameNum, output))
+            file.close()
+
         self.setLabel.emit('Resize the original frames to fit the output')
         self.setLog.emit('Size after network: {}x{}'.format(self.postSize, self.postSize))
         imageDrpOrigScaled = np.zeros((self.imageDrpOrig.shape[0], self.postSize, self.postSize))

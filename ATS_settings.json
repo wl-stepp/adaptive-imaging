@@ -14,9 +14,10 @@
         "matlabPath": "//lebnas1.epfl.ch/microsc125/Watchdog/matlab_bin.dat"
     },
 
+    "sample": "caulobacter",
     "nnImageSize": 128,
-    "lowerThreshold": 70,
-    "upperThreshold": 90,
+    "lowerThreshold": 80,
+    "upperThreshold": 100,
     "slowRate": 5,
     "minFastFrames": 4
 }

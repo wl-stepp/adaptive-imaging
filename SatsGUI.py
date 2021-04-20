@@ -102,8 +102,8 @@ class SatsGUI(QWidget):
 
         self.frameratePlot = self.plot.plot([])
         pen = pg.mkPen(color='#FF0000', style=Qt.DashLine)
-        self.thrLine1 = pg.InfiniteLine(pos=90, angle=0, pen=pen)
-        self.thrLine2 = pg.InfiniteLine(pos=70, angle=0, pen=pen)
+        self.thrLine1 = pg.InfiniteLine(pos=100, angle=0, pen=pen)
+        self.thrLine2 = pg.InfiniteLine(pos=80, angle=0, pen=pen)
         self.thrLine1.hide()
         self.thrLine2.hide()
         self.plot.addItem(self.thrLine1)
@@ -138,12 +138,22 @@ class SatsGUI(QWidget):
         self.inc = -1
         self.rects = []
         self.lastKey = None
+        self.timeUnit = 's'
 
     def loadData(self, folder, progress=None, app=None):
         """ load timing data using the methods in the nnIO module """
         self.elapsed = loadElapsedTime(folder, progress, app)
         self.elapsed.sort()
-        self.elapsed = np.array(self.elapsed[0::2])/1000
+        if self.elapsed[-1] < 10*60:
+            self.elapsed = np.array(self.elapsed[0::2])/1000
+            self.timeUnit = 's'
+        elif self.elapsed[-1] < 120*60:
+            self.elapsed = np.array(self.elapsed[0::2])/1000/60
+            self.timeUnit = 'min'
+        else:
+            self.elapsed = np.array(self.elapsed[0::2])/1000/60/60
+            self.timeUnit = 'h'
+        self.plot.setLabel('bottom', 'Time [{}]'.format(self.timeUnit))
         self.delay = loadiSIMmetadata(folder)
         self.nnData = loadNNData(folder)
 

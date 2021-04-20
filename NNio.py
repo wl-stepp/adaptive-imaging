@@ -91,7 +91,11 @@ def loadNNData(folder):
     """ load the csv file written by NetworkWatchdog when processing live ATS data """
     file = 'output.txt'
     filePath = folder + '/' + file
-    nnData = np.genfromtxt(filePath, delimiter=',')
+    try:
+        nnData = np.genfromtxt(filePath, delimiter=',')
+    except OSError:
+        print('There is no output.txt here!')
+        nnData = []
     return nnData
 
 
