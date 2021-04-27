@@ -94,8 +94,10 @@ class QtImageViewerMerge(QMainWindow):  # GraphicsWindow):
         self.viewBox = self.glw.addViewBox()
         self.viewBox.setAspectLocked()
         self.viewBox.invertY()
-        self.cross = CrossItem(QRectF(0, 0, 1, 1), color='#02CFBB')
+        self.cross = CrossItem(QRectF(0, 0, 1, 1), color='#BBBBBB')
         self.viewBox.addItem(self.cross)
+        self.crossRational = CrossItem(QRectF(0, 0, 1, 1), color='#02CFBB')
+        self.viewBox.addItem(self.crossRational)
 
         # add a Menu on top that can be toggled with a button
         self.toggleMenu = QFrame(self.widget)

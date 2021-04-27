@@ -12,7 +12,8 @@ from PyQt5 import QtCore, QtGui
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import QApplication, QFileDialog, QGridLayout, QWidget
 
-from NNio import loadElapsedTime, loadiSIMmetadata, loadNNData
+from NNio import (loadElapsedTime, loadiSIMmetadata, loadNNData,
+                  loadRationalData)
 
 # Adjust for different screen sizes
 QApplication.setAttribute(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
@@ -108,9 +109,11 @@ class SatsGUI(QWidget):
         self.plot.addItem(self.thrLine2)
 
         self.scatter = pg.ScatterPlotItem(brush='#505050', size=8, pen=pg.mkPen(color='#303030'))
-        self.nnline = pg.PlotCurveItem([], pen=pg.mkPen(color='#303030'))
+        self.nnline = pg.PlotCurveItem([], pen=pg.mkPen(color='#505050'))
+        self.rational = pg.PlotCurveItem([], pen=pg.mkPen(color='#005050',width=2))
         self.plot.addItem(self.scatter)
         self.plot.addItem(self.nnline)
+        self.plot.addItem(self.rational)
 
         # adapt for presentation
         labelStyle = {'color': '#AAAAAA', 'font-size': '20pt'}
@@ -131,6 +134,7 @@ class SatsGUI(QWidget):
         self.elapsed = None
         self.delay = None
         self.nnData = None
+        self.rationalData = None
         self.nnframes = None
         self.nntimes = None
         self.inc = -1
@@ -154,6 +158,13 @@ class SatsGUI(QWidget):
         self.plot.setLabel('bottom', 'Time [{}]'.format(self.timeUnit))
         self.delay = loadiSIMmetadata(folder)
         self.nnData = loadNNData(folder)
+        self.rationalData = loadRationalData(folder)
+        # Stretch this data to the range of nnData to be comparable
+        self.rationalData = self.rationalData - np.min(self.rationalData)
+        nnDataRange = np.max(self.nnData[:,1]) - np.min(self.nnData[:, 1])
+        self.rationalData = np.divide(self.rationalData,
+                                      np.max(self.rationalData)/nnDataRange)
+        self.rationalData = self.rationalData + np.min(self.nnData[:, 1])
 
     def updatePlot(self):
         """ update the plot when the 'A' key is pressed and advance plot. This is skipped
@@ -207,6 +218,7 @@ class SatsGUI(QWidget):
             self.nntimes = self.elapsed[self.nnframes]
             self.nnline.setData(self.nntimes, self.nnData[:, 1])
             self.scatter.setData(self.nntimes, self.nnData[:, 1])
+            self.rational.setData(self.nntimes, self.rationalData)
 
         elif self.inc == 5:
             self.thrLine1.show()
@@ -257,7 +269,8 @@ class SatsGUI(QWidget):
         saveData = {
             'delay': self.delay,
             'nnOutput': self.nnData,
-            'times': self.elapsed
+            'times': self.elapsed,
+            'rational': self.rationalData
         }
         print(fname[0])
         with open(fname[0], 'wb') as fileHandle:

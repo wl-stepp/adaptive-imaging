@@ -99,6 +99,30 @@ def loadNNData(folder):
     return nnData
 
 
+def loadRationalData(folder, order=0):
+    """ Get the maxima of the Drp/FtsZ channel to compare to the neural network output """
+    fileList = glob.glob(folder + '/img_*.tif')
+    channelMode = False
+    for file in fileList:
+        if re.findall(r'.*channel001.*', file):
+            channelMode = True
+            fileList = glob.glob(folder + '/img_*channel00{}*.tif'.format(order))
+            break
+    fileList = sorted(fileList)
+
+    if not channelMode:
+        fileList = fileList[order::2]
+        print(fileList)
+
+    rationalOutput = np.zeros(len(fileList))
+    for index, file in tqdm(enumerate(fileList)):
+        image = tifffile.imread(file)
+        rationalOutput[index] = np.max(image)
+    plt.imshow(image)
+    plt.show()
+    return rationalOutput
+
+
 def resaveNN(folder):
     """ Function to resave files that have been written in float format """
     for filePath in glob.glob(folder + '/img_*_nn.tiff'):
@@ -140,6 +164,7 @@ def makeOuputTxt(folder):
         file = open(txtFile, 'a')
         file.write('%d, %d\n' % (frameNum, output))
         file.close()
+
 
 
 def makePrepImages(folder, model):
@@ -617,12 +642,14 @@ def defineCropRect(file):
 
 def main():
     """ Main method calculating a nn stack for a set of old Mito/drp stacks """
-    from tensorflow import keras
-    folder = 'W:/Watchdog/bacteria/210317_dualColor/FOV_3/Default'
-    model = keras.models.load_model('W:/Watchdog/Model/model_Dora.h5', compile=False)
-    makePrepImages(folder, model)
-    loadiSIMmetadata(folder)
-    # makePrepImages(folder)
+    folder = '//lebnas1.epfl.ch/microsc125/Watchdog/bacteria/210409_Caulobacter/FOV_1/Default'
+    loadRationalData(folder)
+    # from tensorflow import keras
+    # folder = 'W:/Watchdog/bacteria/210317_dualColor/FOV_3/Default'
+    # model = keras.models.load_model('W:/Watchdog/Model/model_Dora.h5', compile=False)
+    # makePrepImages(folder, model)
+    # loadiSIMmetadata(folder)
+
 
     # allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/'
     #                      '180420_DRP_mito_Dora/**/*MMStack*lzw.ome.tif', recursive=True)

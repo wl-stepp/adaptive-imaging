@@ -174,6 +174,7 @@ class NNGui(QWidget):
         self.mitoDataFull = None
         self.drpDataFull = None
         self.maxPos = None
+        self.maxPosRational = None
         self.nnRecalculated = None
         self.settings = None
         self.folder = 'C:/Users/stepp/Documents/02_Raw/SmartMito'
@@ -209,6 +210,7 @@ class NNGui(QWidget):
         self.virtualFolder = data.folder
         self.nnOutput = data.nnOutput
         self.maxPos = data.maxPos
+        self.maxPosRational = data.maxPosRational
         self.frameSlider.setMaximum(data.frameNum - 1)
         # self.refreshGradients()
         self.loadingStatusLabel.setText('Done')
@@ -226,7 +228,7 @@ class NNGui(QWidget):
         else:
             self.loadingStatusLabel.setText('Getting the timing data')
             self.outputPlot.loadData(data.folder, self.progress, self.app)
-            for i in range(-1, 6):
+            for i in range(-1, 5):
                 self.outputPlot.inc = i
                 self.outputPlot.updatePlot()
 
@@ -346,6 +348,7 @@ class NNGui(QWidget):
         self.viewerOrig.cross.setPosition([self.maxPos[i][0]])
         self.viewerProc.cross.setPosition([self.maxPos[i][0]])
         self.viewerNN.cross.setPosition([self.maxPos[i][0]])
+        self.viewerProc.crossRational.setPosition([self.maxPosRational[i][0]])
 
     def getFileNames(self, frame):
         """ Get the filenames for display of a specific frame in virtual stack mode """
@@ -416,6 +419,7 @@ class LoadingThread(QObject):
         self.postSize = None
         self.frameNum = None
         self.maxPos = []
+        self.maxPosRational = []
         self.settings = None
         self.folder = None
         self.nnImageSize = 128
@@ -549,6 +553,7 @@ class LoadingThread(QObject):
             # Get the output data from the nn channel and its position
             self.outputData.append(np.max(self.nnOutput[frame, :, :]))
             self.maxPos.append(list(zip(*np.where(self.nnOutput[frame] == self.outputData[-1]))))
+
             self.change_progress.emit(frame)
             # QApplication.processEvents()
 
@@ -556,8 +561,13 @@ class LoadingThread(QObject):
         txtFile = os.path.join(self.folder, 'output.txt')
         if not os.path.isfile(txtFile) and self.mode == 'folder':
             file = open(txtFile, 'w+')
-            for frameNum, output in enumerate(self.outputData):
-                file.write('%d, %d\n' % (frameNum, output))
+            print(self.outputData)
+            if np.max(self.outputData) > 1.1:
+                for frameNum, output in enumerate(self.outputData):
+                    file.write('%d, %d\n' % (frameNum, output))
+            else:
+                for frameNum, output in enumerate(self.outputData):
+                    file.write('%d, %f\n' % (frameNum, output))
             file.close()
 
         self.setLabel.emit('Resize the original frames to fit the output')
@@ -571,6 +581,8 @@ class LoadingThread(QObject):
             imageMitoOrigScaled[i] = transform.rescale(self.imageMitoOrig[i],
                                                        self.postSize/self.imageMitoOrig[i].shape[1],
                                                        anti_aliasing=True, preserve_range=True)
+            self.maxPosRational.append(
+                list(zip(*np.where(imageDrpOrigScaled[i] == np.max(imageDrpOrigScaled[i])))))
             self.change_progress.emit(i)
             # QApplication.processEvents()
 
