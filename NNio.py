@@ -20,6 +20,7 @@ import tifffile
 import xmltodict
 from matplotlib.widgets import RectangleSelector
 from skimage import io
+from tensorflow.python.training.tracking.util import streaming_restore
 from tqdm import tqdm
 
 from SmartMicro import ImageTiles, NNfeeder
@@ -320,10 +321,10 @@ def cropToSquare(stack):
     return stack
 
 
-def loadTifStack(stack, order=None, outputElapsed=False, cropSquare=True):
+def loadTifStack(stack, order=None, outputElapsed=False, cropSquare=True, img_range=None):
     """ Load a tif stack and deinterleave depending on the order (0 or 1). Also get the
     elapsed time on the images and give them back as list."""
-    imageMitoOrig = io.imread(stack)
+    imageMitoOrig = io.imread(stack, key=img_range)
 
     print(imageMitoOrig.shape)
     with tifffile.TiffFile(stack, fastij=False) as tif:
@@ -364,7 +365,7 @@ def loadTifStack(stack, order=None, outputElapsed=False, cropSquare=True):
                     unitMultiplier = 1
                 elapsed.append(unitMultiplier*float(
                     mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaT']))
-        except TypeError:
+        except (TypeError, KeyError):
             print('No timing metadata just writing frames')
             elapsed = range(0, imageMitoOrig.shape[0]*channels)
 
@@ -400,7 +401,7 @@ def loadTifStackElapsed(file, numFrames=None, skipFrames=0):
                     continue
                 elapsed.append(unitMultiplier*float(
                     mdInfoDict['OME']['Image']['Pixels']['Plane'][frame]['@DeltaT']))
-        except TypeError:
+        except (TypeError, KeyError):
             elapsed = np.arange(0, numFrames)
     return elapsed
 
@@ -451,7 +452,7 @@ def extractTiffStack(file, frame, target):
                      metadata={'Info': ijInfo['Info']})  # pylint: disable=E1136
 
 
-def calculateNNforStack(file, model=None, nnPath=None):
+def calculateNNforStack(file, model=None, nnPath=None, img_range=None):
     """ calculate neural network output for all frames in a stack and write to new stack """
     # dataOrder = 1  # 0 for drp/foci first, 1 for mito/structure first
     if model is None:
@@ -459,23 +460,36 @@ def calculateNNforStack(file, model=None, nnPath=None):
         modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/model_Dora.h5'
         modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/paramSweep5/f32_c07_b08.h5'
         model = keras.models.load_model(modelPath, compile=True)
+    elif isinstance(model, str):
+        if os.path.isfile(model):
+            from tensorflow import keras
+            model = keras.models.load_model(model, compile=True)
+        else:
+            raise FileNotFoundError
 
     # drpOrig, mitoOrig, elapsed, _ = loadTifStack(file, dataOrder,  outputElapsed=True)
     if nnPath is None:
-        nnPath = file[:-8] + '_nn_ffbinary.ome.tif'
+        nnPath = file[:-8] + '_nn.ome.tif'
 
     # Prepare the Metadata for the new file by extracting the ome-metadata
     with tifffile.TiffFile(file, fastij=False) as tif:
-        mdInfo = tif.ome_metadata.encode(encoding='UTF-8', errors='strict')
-        # extract only the planes that was written to
-        mdInfoDict = xmltodict.parse(mdInfo)
-        mdInfoDict['OME']['Image']['Pixels']['Plane'] = \
-            mdInfoDict['OME']['Image']['Pixels']['Plane'][0::2]
-        dataOrder = int(mdInfoDict['OME']['Image']['Description']['@dataOrder'])
-        print('Data order:', dataOrder)
-        mdInfo = xmltodict.unparse(mdInfoDict).encode(encoding='UTF-8', errors='strict')
+        try:
+            mdInfo = tif.ome_metadata.encode(encoding='UTF-8', errors='strict')
+            # extract only the planes that was written to
+            mdInfoDict = xmltodict.parse(mdInfo)
+            mdInfoDict['OME']['Image']['Pixels']['Plane'] = mdInfoDict['OME']['Image']['Pixels']['Plane'][0::2]
 
-    drpOrig, mitoOrig = loadTifStack(file, dataOrder, cropSquare=True)
+            dataOrder = int(mdInfoDict['OME']['Image']['Description']['@dataOrder'])
+            mdInfo = xmltodict.unparse(mdInfoDict).encode(encoding='UTF-8', errors='strict')
+        except (TypeError, AttributeError, KeyError):
+            dataOrder = dataOrderMetadata(file, write=True)
+            # Restart now that the mdInfo should be set
+            calculateNNforStack(file, model=model, nnPath=nnPath, img_range=img_range)
+            return
+        print('Data order:', dataOrder)
+
+    drpOrig, mitoOrig = loadTifStack(file, dataOrder, cropSquare=True, img_range=img_range,
+                                     )
 
     # Get each frame and calculate the nn-output for it
     inputData, positions = NNfeeder.prepareNNImages(mitoOrig[0, :, :],
@@ -497,6 +511,46 @@ def calculateNNforStack(file, model=None, nnPath=None):
 
     # Write the whole stack to a tif file with description
     tifffile.imwrite(nnPath, nnImage, description=mdInfo)
+
+def calculateNNforFolder(folder, model=None):
+    if model is None:
+        from tensorflow import keras
+        modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/model_Dora.h5'
+        modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/paramSweep5/f32_c07_b08.h5'
+        model = keras.models.load_model(modelPath, compile=True)
+    elif isinstance(model,str):
+        if os.path.isfile(model):
+            from tensorflow import keras
+            model = keras.models.load_model(model, compile=True)
+        else:
+            raise FileNotFoundError
+    if os.path.isfile(folder + '/img_channel001_position000_time000000000_z000.tif'):
+        bact_filelist = sorted(glob.glob(folder + '/img_channel001*'))
+        ftsz_filelist = sorted(glob.glob(folder + '/img_channel000*.tif'))
+    else:
+        print('No channels here')
+        filelist = sorted(glob.glob(folder + '/img_*.tif'))
+        re_odd = re.compile(r'.*time\d*[13579]_.*')
+        bact_filelist = [file for file in filelist if re_odd.match(file)]
+        re_even = re.compile(".*time\d*[02468]_.*")
+        ftsz_filelist = [file for file in filelist if re_even.match(file)]
+
+    for index, bact_file in tqdm(enumerate(bact_filelist)):
+        ftsz_file = ftsz_filelist[index]
+        nn_file = bact_file[:-8] + 'nn.tiff'
+        if os.path.isfile(nn_file):
+            continue
+        else:
+            bact = io.imread(bact_file)
+            ftsz = io.imread(ftsz_file)
+            inputData, positions = NNfeeder.prepareNNImages(bact, ftsz, model)
+            outputPredict = model.predict_on_batch(inputData)
+        if model.layers[0].input_shape[0][1] is None:
+            nnImage = outputPredict[0, :, :, 0]
+        else:
+            nnImage = ImageTiles.stitchImage(outputPredict, positions)
+        tifffile.imwrite(nn_file, nnImage)
+
 
 
 def dataOrderMetadata(file, dataOrder=None, write=True):
@@ -559,6 +613,12 @@ def cropOMETiff(file, outFile=None, cropFrame=None, cropRect=None):
     the frames that are in that actual file will be loaded, while for an import, all frames will be
     loaded also from the other files. This function makes one file that has all the frames with the
     correct metadata."""
+
+    if isinstance(file, str):
+        file = Path(file)
+    if isinstance(outFile, str):
+        outFile = Path(outFile)
+
     if cropFrame is None:
         cropFrame, fullLength = checkblackFrames(file.as_posix())
         cropFrame = cropFrame if cropFrame % 2 else cropFrame - 1

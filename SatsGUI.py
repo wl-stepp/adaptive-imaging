@@ -110,7 +110,7 @@ class SatsGUI(QWidget):
 
         self.scatter = pg.ScatterPlotItem(brush='#505050', size=8, pen=pg.mkPen(color='#303030'))
         self.nnline = pg.PlotCurveItem([], pen=pg.mkPen(color='#505050'))
-        self.rational = pg.PlotCurveItem([], pen=pg.mkPen(color='#005050',width=2))
+        self.rational = pg.PlotCurveItem([], pen=pg.mkPen(color='#005050', width=2))
         self.plot.addItem(self.scatter)
         self.plot.addItem(self.nnline)
         self.plot.addItem(self.rational)
@@ -161,7 +161,7 @@ class SatsGUI(QWidget):
         self.rationalData = loadRationalData(folder)
         # Stretch this data to the range of nnData to be comparable
         self.rationalData = self.rationalData - np.min(self.rationalData)
-        nnDataRange = np.max(self.nnData[:,1]) - np.min(self.nnData[:, 1])
+        nnDataRange = np.max(self.nnData[:, 1]) - np.min(self.nnData[:, 1])
         self.rationalData = np.divide(self.rationalData,
                                       np.max(self.rationalData)/nnDataRange)
         self.rationalData = self.rationalData + np.min(self.nnData[:, 1])

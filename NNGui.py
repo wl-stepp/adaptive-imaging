@@ -92,6 +92,7 @@ class NNGui(QWidget):
         self.frameSlider.setMinimumHeight(20)
         self.frameSlider.setValue(0)
         self.frameSlider.setDisabled(True)
+        self.frameSlider.wheelEvent = self.sliderWheelEvent
         self.prevFrameButton = QPushButton("<")
         self.nextFrameButton = QPushButton(">")
 
@@ -387,6 +388,9 @@ class NNGui(QWidget):
         self.frameSlider.setValue(i - 1)
         self.onTimer()
 
+    def sliderWheelEvent(self, event):
+        self.frameSlider.setValue(self.frameSlider.value() + np.sign(event.angleDelta().y()))
+
     def closeEvent(self, _):
         """ Terminate the threads that are running"""
         for thread in self.threads:
@@ -471,6 +475,7 @@ class LoadingThread(QObject):
             self.imageDrpOrig, self.imageMitoOrig = loadTifStack(fname[0], order=self.dataOrder)
             # Save this to go back to when the user wants to load another file
             self.startFolder = os.path.dirname(fname[0])
+            self.folder = self.startFolder
             self.setLog.emit(fname[0])
             self.elapsed = loadTifStackElapsed(fname[0])
         # self.updateProgressRange.emit(self.imageDrpOrig.shape[0])
