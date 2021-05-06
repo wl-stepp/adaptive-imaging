@@ -12,7 +12,7 @@ from skimage import exposure, filters, transform
 from SmartMicro.ImageTiles import getTilePositionsV2
 
 
-def prepareNNImages(mitoFull, drpFull, model):
+def prepareNNImages(mitoFull, drpFull, model, bacteria = False):
     """Preprocess raw iSIM images before running them throught the neural network.
 
     Args:
@@ -74,13 +74,16 @@ def prepareNNImages(mitoFull, drpFull, model):
         i = 0
         inputData = np.zeros((positions['n']**2, nnImageSize, nnImageSize, 2), dtype=np.uint8())
         for position in positions['px']:
+
             inputData[i, :, :, :] = inputDataFull[:,
                                                   position[0]:position[2],
                                                   position[1]:position[3],
                                                   :]
-            # inputData[i, :, :, 1] =  exposure.rescale_intensity(
-            #    inputData[i, :, :, 1], (0, np.max(inputData[i, :, :, 1])),
-            #    out_range=(0, 255))
+            if bacteria:
+                inputData[i, :, :, 1] =  exposure.rescale_intensity(
+                    inputData[i, :, :, 1], (0, np.max(inputData[i, :, :, 1])),
+                    out_range=(0, 255))
+
             inputData[i, :, :, 0] = exposure.rescale_intensity(
                 inputData[i, :, :, 0], (0, np.max(inputData[i, :, :, 0])),
                 out_range=(0, 255))

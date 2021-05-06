@@ -60,6 +60,7 @@ class NetworkWatchdog(QWidget):
     def __init__(self):
         # Set if channels are used in Micromanager
         self.channels = True
+        self.bacteria = True
 
         # Read settings from the json file depending on which computer we are on
         with open('./ATS_settings.json') as file:
@@ -264,7 +265,7 @@ class NetworkWatchdog(QWidget):
 
         # Preprocess the data and make tiles if necessary
         inputData, positions = prepareNNImages(
-            mitoFull, drpFull, self.model)
+            mitoFull, drpFull, self.model, self.bacteria)
         # print(inputData.shape)
         # Calculate the prediction on the full batch of images
         outputPredict = self.model.predict_on_batch(inputData)
