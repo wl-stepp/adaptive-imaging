@@ -167,7 +167,6 @@ def makeOuputTxt(folder):
         file.close()
 
 
-
 def makePrepImages(folder, model):
     """ Prepare the _prep images to enable virtual mode on an ATS folder """
     fileList = glob.glob(folder + '/img_*z000.tif')
@@ -512,6 +511,7 @@ def calculateNNforStack(file, model=None, nnPath=None, img_range=None):
     # Write the whole stack to a tif file with description
     tifffile.imwrite(nnPath, nnImage, description=mdInfo)
 
+
 def calculateNNforFolder(folder, model=None):
     if model is None:
         from tensorflow import keras
@@ -550,7 +550,6 @@ def calculateNNforFolder(folder, model=None):
         else:
             nnImage = ImageTiles.stitchImage(outputPredict, positions)
         tifffile.imwrite(nn_file, nnImage)
-
 
 
 def dataOrderMetadata(file, dataOrder=None, write=True):
@@ -702,8 +701,12 @@ def defineCropRect(file):
 
 def main():
     """ Main method calculating a nn stack for a set of old Mito/drp stacks """
-    folder = '//lebnas1.epfl.ch/microsc125/Watchdog/bacteria/210409_Caulobacter/FOV_1/Default'
-    loadRationalData(folder)
+    folder = 'W:/Watchdog/bacteria/210506_weakSyncro/FOV_1'
+    delay = loadiSIMmetadata(folder)
+    print(delay)
+    # folder = '//lebnas1.epfl.ch/microsc125/Watchdog/bacteria/210409_Caulobacter/FOV_1/Default'
+    # loadRationalData(folder)
+
     # from tensorflow import keras
     # folder = 'W:/Watchdog/bacteria/210317_dualColor/FOV_3/Default'
     # model = keras.models.load_model('W:/Watchdog/Model/model_Dora.h5', compile=False)

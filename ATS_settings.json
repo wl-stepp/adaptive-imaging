@@ -16,8 +16,8 @@
 
     "sample": "caulobacter",
     "nnImageSize": 128,
-    "lowerThreshold": 80,
-    "upperThreshold": 100,
+    "lowerThreshold": 90,
+    "upperThreshold": 120,
     "slowRate": 5,
     "minFastFrames": 4
 }

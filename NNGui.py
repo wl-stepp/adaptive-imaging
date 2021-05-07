@@ -229,7 +229,7 @@ class NNGui(QWidget):
         else:
             self.loadingStatusLabel.setText('Getting the timing data')
             self.outputPlot.loadData(data.folder, self.progress, self.app)
-            for i in range(-1, 5):
+            for i in range(-1, 7):
                 self.outputPlot.inc = i
                 self.outputPlot.updatePlot()
 
