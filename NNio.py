@@ -20,7 +20,6 @@ import tifffile
 import xmltodict
 from matplotlib.widgets import RectangleSelector
 from skimage import io
-from tensorflow.python.training.tracking.util import streaming_restore
 from tqdm import tqdm
 
 from SmartMicro import ImageTiles, NNfeeder
@@ -29,6 +28,16 @@ from SmartMicro import ImageTiles, NNfeeder
 def loadiSIMmetadata(folder):
     """  Load the information written by matlab about the generated DAQ signals for all in folder
     """
+    rename_midnight = False
+    if rename_midnight is True:
+        fileList = sorted(glob.glob(folder + '/iSIMmetadata*.txt'))
+        for file in fileList:
+            print(file.split("Timing_")[1])
+            if file.split("Timing_")[1][0] == '0':
+                new_name = file.split("Timing_")[0] + "Timing_z" + file.split("Timing_")[1]
+                os.rename(file, new_name)
+
+
     delay = []
     fileList = sorted(glob.glob(folder + '/iSIMmetadata*.txt'))
     for name in fileList:
@@ -60,8 +69,13 @@ def loadElapsedTime(folder, progress=None, app=None):
     #             elapsed.append(
     #                 tif.pages[frame].tags['MicroManagerMetadata'].value['ElapsedTime-ms'])
     # else:
-    fileList = glob.glob(folder + '/img_*[0-9].tif')
-    numFrames = int(len(fileList)/2)
+    if os.path.isfile(folder + '/img_channel001_position000_time000000000_z000.tif'):
+        fileList = sorted(glob.glob(folder + '/img_channel001*'))
+        numFrames = len(fileList)
+    else:
+        fileList = glob.glob(folder + '/img_*[0-9].tif')
+        numFrames = int(len(fileList)/2)
+
     if progress is not None:
         progress.setRange(0, numFrames*2)
     i = 0
@@ -405,13 +419,12 @@ def loadTifStackElapsed(file, numFrames=None, skipFrames=0):
     return elapsed
 
 
-def savegif(stack, times, fps):
+def savegif(stack, times, fps, out_file):
     """ Save a gif that uses the right frame duration read from the files. This can be sped up
     using the fps option"""
-    filePath = 'C:/Users/stepp/Documents/02_Raw/SmartMito/presentation.gif'
     times = np.divide(times, fps).tolist()
     print(stack.shape)
-    imageio.mimsave(filePath, stack, duration=times)
+    imageio.mimsave(out_file, stack, duration=times)
 
 
 def extractTiffStack(file, frame, target):
@@ -516,14 +529,15 @@ def calculateNNforFolder(folder, model=None):
     if model is None:
         from tensorflow import keras
         modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/model_Dora.h5'
-        modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/paramSweep5/f32_c07_b08.h5'
+        # modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/paramSweep5/f32_c07_b08.h5'
         model = keras.models.load_model(modelPath, compile=True)
-    elif isinstance(model,str):
+    elif isinstance(model, str):
         if os.path.isfile(model):
             from tensorflow import keras
             model = keras.models.load_model(model, compile=True)
         else:
             raise FileNotFoundError
+    print(folder)
     if os.path.isfile(folder + '/img_channel001_position000_time000000000_z000.tif'):
         bact_filelist = sorted(glob.glob(folder + '/img_channel001*'))
         ftsz_filelist = sorted(glob.glob(folder + '/img_channel000*.tif'))
@@ -537,7 +551,7 @@ def calculateNNforFolder(folder, model=None):
 
     for index, bact_file in tqdm(enumerate(bact_filelist)):
         ftsz_file = ftsz_filelist[index]
-        nn_file = bact_file[:-8] + 'nn.tiff'
+        nn_file = ftsz_file[:-8] + 'nn.tiff'
         if os.path.isfile(nn_file):
             continue
         else:
@@ -603,7 +617,7 @@ def dataOrderMetadata(file, dataOrder=None, write=True):
     return int(dataOrder) if dataOrder is not None else dataOrder
 
 
-def cropOMETiff(file, outFile=None, cropFrame=None, cropRect=None):
+def cropOMETiff(file, outFile=None, cropFrame=None, cropRect=None, timeout=15):
     """ Crop a tif while conserving the metadata. Micromanager seems to save data in a rather weird
     format if it is supposed to save them to stacks. It limits the file size to ~4GB and splits the
     series up into several files _1, _2, _3 etc. The OME metadata is however written to the first
@@ -643,7 +657,7 @@ def cropOMETiff(file, outFile=None, cropFrame=None, cropRect=None):
     else:
         rect = '-crop ' + ','.join([str(i) for i in cropRect])
 
-    files = file.as_posix() + ' ' + outFile.as_posix() + ' & timeout 15'
+    files = file.as_posix() + ' ' + outFile.as_posix() + ' & timeout ' + str(timeout)
     command = ' '.join([bfconvert, compression, frames, rect, files])
     print(command)
     os.system(command)
@@ -699,11 +713,19 @@ def defineCropRect(file):
     return rectProp
 
 
+
 def main():
     """ Main method calculating a nn stack for a set of old Mito/drp stacks """
-    folder = 'W:/Watchdog/bacteria/210506_weakSyncro/FOV_1'
-    delay = loadiSIMmetadata(folder)
-    print(delay)
+
+    folder = "C:/Users/stepp/Documents/02_Raw/Caulobacter_iSIM/slow/"
+    samples = ["0", "1", "2", "3", "4", "6", "7", "8", "10", "11", "13"]
+    folders = [folder + sample + '/' for sample in samples]
+    for folder in folders:
+        calculateNNforFolder(folder)
+
+    # folder = 'W:/Watchdog/bacteria/210512_Syncro/FOV_3/Default'
+    # delay = loadElapsedTime(folder)
+    # print(delay)
     # folder = '//lebnas1.epfl.ch/microsc125/Watchdog/bacteria/210409_Caulobacter/FOV_1/Default'
     # loadRationalData(folder)
 

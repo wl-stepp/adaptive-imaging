@@ -20,12 +20,14 @@ def main():
     """ Method to test the Viewer in a QBoxLayout with 1 and 2 channels"""
     app = QApplication(sys.argv)
     viewer = QtImageViewerSeries()
-    fname = ('\\lebnas1.epfl.ch\microsc125\Watchdog\Model\Proc.h5')
+    fname = ('//lebnas1.epfl.ch/microsc125/Watchdog/Model/Drp1.h5')
     # fname = ('W:/Watchdog/Model/Proc.h5')
     # fname = ('C:/Users/stepp/Documents/02_Raw/SmartMito/__short.tif')
     viewer.loadSeries(fname)
-    viewer.loadSeries(fname)
-    viewer.loadSeries(fname)
+    viewer.viewer.cross.hide()
+    viewer.viewer.crossRational.hide()
+    # viewer.loadSeries(fname)
+    # viewer.loadSeries(fname)
     viewer.show()
     sys.exit(app.exec_())
 
@@ -68,8 +70,16 @@ class QtImageViewerSeries(QWidget):
         else:
             i = int(np.round(i))
         print(i)
-        for channel in range(self.series.shape[3]):
-            self.viewer.setImage(self.series[i, :, :, channel-1], channel-1)
+        if self.series.ndim == 4:
+            num_channels = self.series.shape[3]
+        else:
+            num_channels = 1
+
+        if num_channels == 1:
+            self.viewer.setImage(self.series[i, :, :], 0)
+        else:
+            for channel in range(num_channels):
+                self.viewer.setImage(self.series[i, :, :, channel-1], channel-1)
 
     def loadSeries(self, filePath):
         """ Load anything that skimage imread can load as a series or a .h5 file """
@@ -93,7 +103,10 @@ class QtImageViewerSeries(QWidget):
                 self.series = io.imread(filePath)
             else:
                 self.series = np.concatenate((self.series, io.imread(filePath)), axis=2)
-        self.viewer.addImage(self.series[0, :, :, self.series.shape[-1]-1])
+        if self.series.size == 4:
+            self.viewer.addImage(self.series[0, :, :, self.series.shape[-1]-1])
+        else:
+            self.viewer.addImage(self.series[:, :, self.series.shape[-1]-1])
         self.viewer.rangeChanged()
         self.viewer.resetRanges()
         self.slider.setSliderRange([-1, self.series.shape[0]-1])

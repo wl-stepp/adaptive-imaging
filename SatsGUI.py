@@ -141,19 +141,26 @@ class SatsGUI(QWidget):
         self.rects = []
         self.lastKey = None
         self.timeUnit = 's'
+        self.mode = 'Mito'
 
-    def loadData(self, folder, progress=None, app=None):
+    def loadData(self, folder, progress=None, app=None, channels=True):
         """ load timing data using the methods in the nnIO module """
         self.elapsed = loadElapsedTime(folder, progress, app)
         self.elapsed.sort()
+
+        if channels is True:
+            step = 1
+        else:
+            step = 2
+
         if self.elapsed[-1] < 10*60:
-            self.elapsed = np.array(self.elapsed[0::2])/1000
+            self.elapsed = np.array(self.elapsed[0::step])/1000
             self.timeUnit = 's'
         elif self.elapsed[-1] < 120*60:
-            self.elapsed = np.array(self.elapsed[0::2])/1000/60
+            self.elapsed = np.array(self.elapsed[0::step])/1000/60
             self.timeUnit = 'min'
         else:
-            self.elapsed = np.array(self.elapsed[0::2])/1000/60/60
+            self.elapsed = np.array(self.elapsed[0::step])/1000/60/60
             self.timeUnit = 'h'
         self.plot.setLabel('bottom', 'Time [{}]'.format(self.timeUnit))
         self.delay = loadiSIMmetadata(folder)
@@ -177,16 +184,18 @@ class SatsGUI(QWidget):
             self.nnPlotItem.setData(x=self.elapsed, y=np.arange(0, len(self.elapsed)))
 
         elif self.inc == 2:
-            self.delay = np.append(np.ones(5), self.delay)
-            rectData = self.delay[5:len(self.elapsed)]
-            # rectData = np.append(rectData[0:-2], rectData[0])
-            # see where the delay value changes
-            # print(rectDataroll)
-            changes = np.where(np.roll(rectData, 1) != rectData)[0]
+
+            if self.mode == 'bacteria':
+                changes = self.makeChanges(self.elapsed)
+                print(changes)
+            else:
+                self.delay = np.append(np.ones(5), self.delay)
+                rectData = self.delay[5:len(self.elapsed)]
+                changes = np.where(np.roll(rectData, 1) != rectData)[0]
+                changes = changes +1
             # map this frame data to the elapsed time data
 
-            # print(np.round(np.diff(self.elapsed),2))
-            changes = self.elapsed[changes+1]
+            changes = self.elapsed[changes]
 
             changes = np.insert(changes, 0, np.min(self.elapsed))
             changes = np.append(changes, np.max(self.elapsed))
@@ -218,7 +227,7 @@ class SatsGUI(QWidget):
             self.nntimes = self.elapsed[self.nnframes]
             self.nnline.setData(self.nntimes, self.nnData[:, 1])
             self.scatter.setData(self.nntimes, self.nnData[:, 1])
-            self.rational.setData(self.nntimes, self.rationalData)
+            # self.rational.setData(self.nntimes, self.rationalData)
 
         elif self.inc == 5:
             self.thrLine1.show()
@@ -276,14 +285,28 @@ class SatsGUI(QWidget):
         with open(fname[0], 'wb') as fileHandle:
             pickle.dump(saveData, fileHandle, pickle.HIGHEST_PROTOCOL)
 
+    def makeChanges(self, times):
+        """ For the fast switching bacteria ATS data we need another way to calculate the fps """
+        changes = []
+        lastFps = 0
+        times = np.diff(times)
+        times = np.round(times*100)
+        print(times)
+        for index in range(1, len(times)):
+            if not times[index] == lastFps and index > 1:
+                changes.append(index)
+            lastFps = times[index]
+        return changes
 
 def main():
     "Presentation mode of the GUI that can be advanced clicked the A button on the keyboard."
     app = QApplication(sys.argv)
     gui = SatsGUI()
-    folder = ('W:/iSIMstorage/Users/Willi/180420_drp_mito_Dora/sample1/'
-              'sample1_cell_3_MMStack_Pos0_combine.ome_ATS')
-    gui.loadData(folder)
+    # folder = ('W:/iSIMstorage/Users/Willi/180420_drp_mito_Dora/sample1/'
+    #           'sample1_cell_3_MMStack_Pos0_combine.ome_ATS')
+    folder = 'W:/Watchdog/bacteria/210512_Syncro/FOV_3/Default'
+    gui.mode = 'bacteria'
+    gui.loadData(folder, channels=True)
     # gui.loadData('W:/Watchdog/microM_test/201208_cell_Int0s_30pc_488_50pc_561_band_5')
     gui.show()
 
