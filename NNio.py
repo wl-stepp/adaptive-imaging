@@ -2,6 +2,8 @@
 Input/Ouput module for data generated using the network_watchdog approach for adaptive temporal
 sampling on the iSIM
 '''
+# There are mixed naming styles here unfortunately
+# pylint: disable=C0103
 
 import contextlib
 import glob
@@ -37,7 +39,6 @@ def loadiSIMmetadata(folder):
                 new_name = file.split("Timing_")[0] + "Timing_z" + file.split("Timing_")[1]
                 os.rename(file, new_name)
 
-
     delay = []
     fileList = sorted(glob.glob(folder + '/iSIMmetadata*.txt'))
     for name in fileList:
@@ -54,6 +55,7 @@ def loadiSIMmetadata(folder):
         except ValueError:
             # This means that delay was > 240 and an empty frame was added
             delay[-1] = delay[-1] + 240
+
     return delay
 
 
@@ -61,6 +63,7 @@ def loadElapsedTime(folder, progress=None, app=None):
     """ get the Elapsed time for all .tif files in folder or from a stack """
 
     elapsed = []
+    step = None
     # Check for folder or stack mode
     # if not re.match(r'*.tif*', folder) is None:
     #     # get microManager elapsed times if available
@@ -72,9 +75,11 @@ def loadElapsedTime(folder, progress=None, app=None):
     if os.path.isfile(folder + '/img_channel001_position000_time000000000_z000.tif'):
         fileList = sorted(glob.glob(folder + '/img_channel001*'))
         numFrames = len(fileList)
+        step = 1
     else:
-        fileList = glob.glob(folder + '/img_*[0-9].tif')
+        fileList = sorted(glob.glob(folder + '/img_*[0-9].tif'))
         numFrames = int(len(fileList)/2)
+        step = 2
 
     if progress is not None:
         progress.setRange(0, numFrames*2)
@@ -99,7 +104,7 @@ def loadElapsedTime(folder, progress=None, app=None):
             progress.setValue(i)
         i = i + 1
 
-    return elapsed
+    return elapsed[0::step]
 
 
 def loadNNData(folder):
@@ -468,13 +473,13 @@ def calculateNNforStack(file, model=None, nnPath=None, img_range=None):
     """ calculate neural network output for all frames in a stack and write to new stack """
     # dataOrder = 1  # 0 for drp/foci first, 1 for mito/structure first
     if model is None:
-        from tensorflow import keras
+        from tensorflow import keras  # pylint: disable=C0415
         modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/model_Dora.h5'
         modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/paramSweep5/f32_c07_b08.h5'
         model = keras.models.load_model(modelPath, compile=True)
     elif isinstance(model, str):
         if os.path.isfile(model):
-            from tensorflow import keras
+            from tensorflow import keras  # pylint: disable=C0415
             model = keras.models.load_model(model, compile=True)
         else:
             raise FileNotFoundError
@@ -489,7 +494,8 @@ def calculateNNforStack(file, model=None, nnPath=None, img_range=None):
             mdInfo = tif.ome_metadata.encode(encoding='UTF-8', errors='strict')
             # extract only the planes that was written to
             mdInfoDict = xmltodict.parse(mdInfo)
-            mdInfoDict['OME']['Image']['Pixels']['Plane'] = mdInfoDict['OME']['Image']['Pixels']['Plane'][0::2]
+            intermediateInfo = mdInfoDict['OME']['Image']['Pixels']['Plane'][0::2]
+            mdInfoDict['OME']['Image']['Pixels']['Plane'] = intermediateInfo
 
             dataOrder = int(mdInfoDict['OME']['Image']['Description']['@dataOrder'])
             mdInfo = xmltodict.unparse(mdInfoDict).encode(encoding='UTF-8', errors='strict')
@@ -526,14 +532,15 @@ def calculateNNforStack(file, model=None, nnPath=None, img_range=None):
 
 
 def calculateNNforFolder(folder, model=None):
+    """ Recalculate all the neural network frames for a folder with peak/structure frames """
     if model is None:
-        from tensorflow import keras
+        from tensorflow import keras  # pylint: disable=C0415
         modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/GUI/model_Dora.h5'
         # modelPath = '//lebnas1.epfl.ch/microsc125/Watchdog/Model/paramSweep5/f32_c07_b08.h5'
         model = keras.models.load_model(modelPath, compile=True)
     elif isinstance(model, str):
         if os.path.isfile(model):
-            from tensorflow import keras
+            from tensorflow import keras  # pylint: disable=C0415
             model = keras.models.load_model(model, compile=True)
         else:
             raise FileNotFoundError
@@ -546,7 +553,7 @@ def calculateNNforFolder(folder, model=None):
         filelist = sorted(glob.glob(folder + '/img_*.tif'))
         re_odd = re.compile(r'.*time\d*[13579]_.*')
         bact_filelist = [file for file in filelist if re_odd.match(file)]
-        re_even = re.compile(".*time\d*[02468]_.*")
+        re_even = re.compile(r'.*time\d*[02468]_.*')
         ftsz_filelist = [file for file in filelist if re_even.match(file)]
 
     for index, bact_file in tqdm(enumerate(bact_filelist)):
@@ -707,11 +714,12 @@ def defineCropRect(file):
                                    minspanx=5, minspany=5, spancoords='pixels', rectprops=rectprops,
                                    interactive=True, state_modifier_keys={'square': 'shift'})
     plt.show()
-    rectProp = rectHandle._rect_bbox
+    # There might be different properties there that could give the same information
+    # https://matplotlib.org/stable/api/widgets_api.html#matplotlib.widgets.RectangleSelector
+    rectProp = rectHandle._rect_bbox  # pylint: disable=W0212
     rectProp = tuple(int(x) for x in rectProp)
     print(rectProp)
     return rectProp
-
 
 
 def main():
@@ -734,7 +742,6 @@ def main():
     # model = keras.models.load_model('W:/Watchdog/Model/model_Dora.h5', compile=False)
     # makePrepImages(folder, model)
     # loadiSIMmetadata(folder)
-
 
     # allFiles = glob.glob('//lebnas1.epfl.ch/microsc125/iSIMstorage/Users/Willi/'
     #                      '180420_DRP_mito_Dora/**/*MMStack*lzw.ome.tif', recursive=True)

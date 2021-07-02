@@ -23,6 +23,9 @@
 		},
 		{
 			"path": "..\\..\\02_Raw"
+		},
+		{
+			"path": "..\\toolbox"
 		}
 	],
 	"settings": {}
