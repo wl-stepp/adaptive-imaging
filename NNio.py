@@ -222,6 +222,13 @@ def makePrepImages(folder, model):
         tifffile.imwrite(drpFilePrep, drpDataFull)
 
 
+def saveTifStack(target_file, stack1, stack2):
+    """ Get stacks from loadTifFolder and save them as a stack that is easy to load in Fiji.
+    """
+    stack = np.stack([stack1, stack2], axis=1)
+    tifffile.imwrite(target_file, stack, metadata={'axes': 'TCYX', 'TimeIncrement': 1/10})
+
+
 def loadTifFolder(folder, resizeParam=1, order=0, progress=None, cropSquare=True) -> np.ndarray:
     """Function to load SATS data from a folder with the individual tif files written by
     microManager. Inbetween there might be neural network images that are also loaded into
@@ -725,11 +732,17 @@ def defineCropRect(file):
 def main():
     """ Main method calculating a nn stack for a set of old Mito/drp stacks """
 
-    folder = "C:/Users/stepp/Documents/02_Raw/Caulobacter_iSIM/slow/"
-    samples = ["0", "1", "2", "3", "4", "6", "7", "8", "10", "11", "13"]
-    folders = [folder + sample + '/' for sample in samples]
-    for folder in folders:
-        calculateNNforFolder(folder)
+    folder = 'W:/Watchdog/microM_test/201208_cell_Int0s_30pc_488_50pc_561_band_10'
+    target_folder = 'W:/Watchdog/microM_test/201208_cell_Int0s_30pc_488_50pc_561_band_10/timed'
+    stack1, stack2, _ = loadTifFolder(folder)
+    saveTifStack(os.path.join(target_folder, os.path.basename(folder) + '.tiff'), stack1, stack2)
+
+
+    # folder = "C:/Users/stepp/Documents/02_Raw/Caulobacter_iSIM/slow/"
+    # samples = ["0", "1", "2", "3", "4", "6", "7", "8", "10", "11", "13"]
+    # folders = [folder + sample + '/' for sample in samples]
+    # for folder in folders:
+    #     calculateNNforFolder(folder)
 
     # folder = 'W:/Watchdog/bacteria/210512_Syncro/FOV_3/Default'
     # delay = loadElapsedTime(folder)

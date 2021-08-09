@@ -24,11 +24,12 @@ import sys
 import numpy as np
 import PyQt5.QtCore as QtCore
 import pyqtgraph as pg
-from PyQt5 import QtGui
+from PyQt5 import QtGui, QtWidgets
 from PyQt5.QtCore import QPointF, QRectF, Qt, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QPainter, QPicture
-from PyQt5.QtWidgets import (QApplication, QFrame, QGridLayout, QMainWindow,
-                             QPushButton, QSlider, QWidget)
+from PyQt5.QtWidgets import (QApplication, QFrame, QGridLayout, QLabel,
+                             QMainWindow, QPushButton, QSizePolicy, QSlider,
+                             QWidget)
 from skimage import io
 
 
@@ -292,7 +293,7 @@ class GradientEditorWidget(pg.GraphicsView):
         pg.GraphicsView.__init__(self, *args, useOpenGL=False, background=background)
         self.item = pg.GradientEditorItem(*args, **kargs)
         self.setCentralItem(self.item)
-        self.setSizePolicy(QtGui.QSizePolicy.Preferred, QtGui.QSizePolicy.Expanding)
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         self.setMaximumWidth(15)
         self.setMaximumHeight(150)
 
@@ -418,16 +419,16 @@ class LUTItemSimple(QWidget):
             brush = QtGui.QBrush(grad)
             painter.fillRect(QtCore.QRect(0, 0, 100, 15), brush)
             painter.end()
-            label = QtGui.QLabel()
+            label = QLabel()
             label.setPixmap(pixmap)
             label.setContentsMargins(1, 1, 1, 1)
-            labelName = QtGui.QLabel(gradient)
-            hbox = QtGui.QHBoxLayout()
+            labelName = QLabel(gradient)
+            hbox = QtWidgets.QHBoxLayout()
             hbox.addWidget(labelName)
             hbox.addWidget(label)
-            widget = QtGui.QWidget()
+            widget = QtWidgets.QWidget()
             widget.setLayout(hbox)
-            act = QtGui.QWidgetAction(self)
+            act = QtWidgets.QWidgetAction(self)
             act.setDefaultWidget(widget)
             act.triggered.connect(self.customLutClicked)
             act.name = gradient

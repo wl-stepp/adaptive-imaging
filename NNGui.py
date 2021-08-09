@@ -20,6 +20,7 @@ import sys
 import numpy as np
 import pyqtgraph as pg
 import tifffile
+from PyQt5 import QtWidgets
 from PyQt5.QtCore import QObject, Qt, QThread, QTimer, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import (QApplication, QFileDialog, QGridLayout, QGroupBox,
                              QLabel, QPlainTextEdit, QProgressBar, QPushButton,

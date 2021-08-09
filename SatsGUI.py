@@ -27,6 +27,11 @@ def main():
     #           'sample1_cell_3_MMStack_Pos0_combine.ome_ATS')
     folder = ("W:/iSIMstorage/Users/Dora/20201205_mitoSmart/sample3/"
               "cell_Int0s_30pc_488_50pc_561_band_1")
+
+    # ATSSimulation data
+    folder = ("W:/iSIMstorage/Users/Willi/180420_drp_mito_Dora/sample1/"
+              "sample1_cell_3_MMStack_Pos0_combine_ffmodel.ome_ATS")
+
     gui.mode = 'Mito'
     gui.loadData(folder)
     # gui.loadData('W:/Watchdog/microM_test/201208_cell_Int0s_30pc_488_50pc_561_band_5')
