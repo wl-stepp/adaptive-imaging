@@ -9,11 +9,16 @@ import contextlib
 import glob
 import json
 import os
+import pdb
+import pickle
 import re
+import shutil
 import threading
+from multiprocessing import Pool
 from pathlib import Path
 from tkinter import messagebox
 
+import cv2
 import h5py
 import imageio
 import matplotlib.pyplot as plt
@@ -22,9 +27,10 @@ import tifffile
 import xmltodict
 from matplotlib.widgets import RectangleSelector
 from skimage import io
+from toolbox.image_processing import deconvolve
 from tqdm import tqdm
 
-from SmartMicro import ImageTiles, NNfeeder
+from . import ImageTiles, NNfeeder
 
 
 def loadiSIMmetadata(folder):
@@ -229,7 +235,8 @@ def saveTifStack(target_file, stack1, stack2):
     tifffile.imwrite(target_file, stack, metadata={'axes': 'TCYX', 'TimeIncrement': 1/10})
 
 
-def loadTifFolder(folder, resizeParam=1, order=0, progress=None, cropSquare=True) -> np.ndarray:
+def loadTifFolder(folder, resizeParam=1, order=0, progress=None,
+                  cropSquare=True, outputs=None, decon_id:str = 'None') -> np.ndarray:
     """Function to load SATS data from a folder with the individual tif files written by
     microManager. Inbetween there might be neural network images that are also loaded into
     an array. Mainly used with NN_GUI_v2.py
@@ -248,11 +255,35 @@ def loadTifFolder(folder, resizeParam=1, order=0, progress=None, cropSquare=True
         stack2 (numpy.array): stack of data depending on order
         stackNN (numpy.array): stack of available network output, with zeros where no file was found
     """
+    outputs = [] if outputs is None else outputs
+
+    def loadDecon(filePath, stackDecon, frame):
+        if decon_id == 'None':
+            deconPath = filePath[:-8] + 'decon.tiff'
+        else:
+            deconPath = sorted(glob.glob(os.path.join(os.path.dirname(filePath),decon_id)))
+            deconPath = deconPath[frame]
+
+        try:
+            stackDecon[frame] = io.imread(deconPath, {'dtype': np.uint16})
+        except FileNotFoundError:
+            print('Did not find', deconPath)
+        return stackDecon
+
+    def loadNN(filePath, stackNN):
+        nnPath = filePath[:-8] + 'nn.tiff'
+        try:
+            stackNN[frame] = io.imread(nnPath)
+        except FileNotFoundError:
+            print('Did not find', nnPath)
+        return stackNN
+
     fileList = sorted(glob.glob(folder + '/img_*.tif'))
     numFrames = int(len(fileList)/2)
     pixelSize = io.imread(fileList[0]).shape
     stack1 = np.zeros((numFrames, pixelSize[0], pixelSize[1]))
     stack2 = np.zeros((numFrames, pixelSize[0], pixelSize[1]))
+    stackDecon = np.zeros((numFrames, pixelSize[0], pixelSize[1]), dtype=np.uint16)
     postSize = round(pixelSize[1]*resizeParam)
     stackNN = np.zeros((numFrames,  postSize, postSize))
     frame = 0
@@ -288,19 +319,20 @@ def loadTifFolder(folder, resizeParam=1, order=0, progress=None, cropSquare=True
             else:
                 stack2[frameNum] = io.imread(filePath)
                 frame = frame + 1
+                stackDecon = loadDecon(filePath, stackDecon, frameNum)
         else:
             if not frameNum % 2:
                 # odd
                 stack1[frame] = io.imread(filePath)
-                nnPath = filePath[:-8] + 'nn.tiff'
-                try:
-                    stackNN[frame] = io.imread(nnPath)
-                except FileNotFoundError:
-                    pass
+                if order == 0:
+                    stackNN = loadNN(filePath, stackNN)
+                    stackDecon = loadDecon(filePath, stackDecon, frame)
             else:
                 stack2[frame] = io.imread(filePath)
+                if order == 1:
+                    stackNN = loadNN(filePath, stackNN)
+                    stackDecon = loadDecon(filePath, stackDecon, frame)
                 frame = frame + 1
-
         # Progress the bar if available
         # if progress is not None:
             # progress.setValue(frameNum)
@@ -311,6 +343,12 @@ def loadTifFolder(folder, resizeParam=1, order=0, progress=None, cropSquare=True
     if cropSquare:
         stack1 = cropToSquare(stack1)
         stack2 = cropToSquare(stack2)
+
+    if 'decon' in outputs:
+        if order == 0:
+            return stack1, stack2, stackNN, stackDecon
+        else:
+            return stack2, stack1, stackNN, stackDecon
 
     if order == 0:
         return stack1, stack2, stackNN
@@ -352,7 +390,7 @@ def loadTifStack(stack, order=None, outputElapsed=False, cropSquare=True, img_ra
     imageMitoOrig = io.imread(stack, key=img_range)
 
     print(imageMitoOrig.shape)
-    with tifffile.TiffFile(stack, fastij=False) as tif:
+    with tifffile.TiffFile(stack) as tif:
         # try to get dataOrder from file
         if order is None:
             mdInfo = tif.ome_metadata  # pylint: disable=E1136  # pylint/issues/3139
@@ -552,32 +590,95 @@ def calculateNNforFolder(folder, model=None):
         else:
             raise FileNotFoundError
     print(folder)
-    if os.path.isfile(folder + '/img_channel001_position000_time000000000_z000.tif'):
-        bact_filelist = sorted(glob.glob(folder + '/img_channel001*'))
-        ftsz_filelist = sorted(glob.glob(folder + '/img_channel000*.tif'))
-    else:
-        print('No channels here')
-        filelist = sorted(glob.glob(folder + '/img_*.tif'))
-        re_odd = re.compile(r'.*time\d*[13579]_.*')
-        bact_filelist = [file for file in filelist if re_odd.match(file)]
-        re_even = re.compile(r'.*time\d*[02468]_.*')
-        ftsz_filelist = [file for file in filelist if re_even.match(file)]
+    files, _ = get_files(folder)
+    bact_filelist = files['network']
+    ftsz_filelist = files['peaks']
+    # re_even = re.compile(r".*time\d*[02468]_.*")
 
     for index, bact_file in tqdm(enumerate(bact_filelist)):
         ftsz_file = ftsz_filelist[index]
-        nn_file = ftsz_file[:-8] + 'nn.tiff'
+        nn_file = bact_file[:-8] + 'nn.tiff'
         if os.path.isfile(nn_file):
+            # os.remove(nn_file)
             continue
-        else:
-            bact = io.imread(bact_file)
-            ftsz = io.imread(ftsz_file)
-            inputData, positions = NNfeeder.prepareNNImages(bact, ftsz, model)
-            outputPredict = model.predict_on_batch(inputData)
+        bact = io.imread(bact_file)
+        ftsz = io.imread(ftsz_file)
+        inputData, positions = NNfeeder.prepareNNImages(bact, ftsz, model)
+        outputPredict = model.predict_on_batch(inputData)
         if model.layers[0].input_shape[0][1] is None:
             nnImage = outputPredict[0, :, :, 0]
         else:
             nnImage = ImageTiles.stitchImage(outputPredict, positions)
-        tifffile.imwrite(nn_file, nnImage)
+        tifffile.imwrite(nn_file, nnImage.astype(np.uint8))
+
+
+def deconvoleStack(file: str, mode: str = 'cpu'):
+    """ Deconvolve the struct part of a stack of foci/struct data using the deconvolve function
+    in the toolbox."""
+    _, stack_struct = loadTifStack(file)
+    stackDecon = np.zeros(stack_struct.shape, dtype=np.uint16)
+    if mode == 'cuda':
+        from toolbox.image_processing import cuda_decon
+        cuda_params = cuda_decon.CudaParams()
+
+    for frame in tqdm(range(stack_struct.shape[0])):
+        if mode == 'cpu':
+            stackDecon[frame, :, :] = deconvolve.full_richardson_lucy(stack_struct[frame, :, :])
+        else:
+            stackDecon[frame, :, :] = cuda_decon.richardson_lucy(stack_struct[frame, :, :],
+                                                                 params=cuda_params)
+
+    out_file = file[:-8] + '_decon.tiff'
+    tifffile.imwrite(out_file, stackDecon)
+
+
+def deconvolveFolder(folder, n_threads=10, mode='cpu', cuda_params=None, subfolder=None):
+    """ Wrapper function for deconvolveOneFolder to allow for parallel computation """
+
+    if isinstance(folder, list) and mode == 'cpu':
+        with Pool(n_threads) as p:
+            p.map(deconvolveOneFolder, folder, subfolder)
+    elif isinstance(folder, list):
+        for single_folder in folder:
+            deconvolveOneFolder(single_folder, mode, cuda_params, subfolder)
+    else:
+        deconvolveOneFolder(folder, mode, cuda_params, subfolder)
+
+
+def deconvolveOneFolder(folder, mode='cpu', cuda_params=None, subfolder=None, channel='network'):
+    """ Deconvolve the struct frames in a folder of foci/struct data using the deconvolve function
+    in the toolbox. """
+    if mode == 'cuda':
+        from toolbox.image_processing import cuda_decon
+
+    if cuda_params is None and mode == 'cuda':
+        print('Using default coda_params')
+        cuda_params = cuda_decon.CudaParams(background=1.05, sigma=3.9/2.335)  # 0.92 mito 1 for caulo highlight
+    print('sigma: ', cuda_params.kernel['sigma'], '\nbackground: ', cuda_params.background)
+
+    print(folder)
+    files, _ = get_files(folder)
+    files = files[channel]
+    for idx, file in enumerate(tqdm(files)):
+        struct_img = io.imread(file)
+        if mode == 'cpu':
+            decon_img = deconvolve.full_richardson_lucy(struct_img)
+        elif mode == 'cuda':
+            decon_img = cuda_decon.richardson_lucy(struct_img, params=cuda_params)
+
+        if cuda_params.after_gaussian:
+            decon_img = cv2.GaussianBlur(decon_img, (0, 0), cuda_params.after_gaussian)
+
+        if subfolder is None:
+            out_file = file[:-8] + 'decon.tiff'
+        else:
+            os.makedirs(os.path.join(folder, subfolder), exist_ok=True)
+            filename = os.path.basename(file)[:-12] + str(idx).zfill(4) + '.decon.tiff'
+            out_file = os.path.join(folder, subfolder, filename)
+            with open(os.path.join(folder, subfolder, 'params.txt'), 'w') as outp:
+                outp.write(json.dumps(cuda_params.to_dict()))
+
+        tifffile.imwrite(out_file, decon_img)
 
 
 def dataOrderMetadata(file, dataOrder=None, write=True):
@@ -729,14 +830,89 @@ def defineCropRect(file):
     return rectProp
 
 
+def get_files(folder):
+    """ Get the relevant files from a folder of foci/struct data """
+    stack = False
+    ftsz_filelist = False
+    bact_filelist = False
+    if os.path.isfile(folder + '/img_channel001_position000_time000000000_z000.tif'):
+        bact_filelist = sorted(glob.glob(folder + '/img_channel001*_z*'))
+        ftsz_filelist = sorted(glob.glob(folder + '/img_channel000*.tif'))
+        nn_filelist = sorted(glob.glob(folder + '/img_*_nn*'))
+    elif os.path.isfile(folder + '/img_channel000_position000_time000000000_z000.tif'):
+        print('No channels here')
+        filelist = sorted(glob.glob(folder + '/img_*.tif'))
+        re_odd = re.compile(r".*time\d*[13579]_.*tif$")
+        bact_filelist = [file for file in filelist if re_odd.match(file)]
+        re_even = re.compile(r".*time\d*[02468]_.*")
+        ftsz_filelist = [file for file in filelist if re_even.match(file)]
+        nn_filelist = sorted(glob.glob(folder + '/img_*_nn*'))
+    else:
+        print("Image stacks")
+        files = sorted(glob.glob(folder + '*_crop.ome.tif'))
+        print(files)
+        if isinstance(files, list):
+            nn_filelist = [file[:-8] + '_nn.ome.tif' for file in files]
+        else:
+            nn_filelist = files[:-8] + '_nn.ome.tif'
+        stack = files
+
+    files = {'network': bact_filelist,
+             'peaks': ftsz_filelist,
+             'nn': nn_filelist,
+             'stack': stack}
+    return files, stack
+
+
+def transfer_nn_to_folder(folder):
+    files, _ = get_files(folder)
+    files = files['nn']
+    os.makedirs(os.path.join(folder, 'nn'), exist_ok=True)
+    for idx, file in tqdm(enumerate(files)):
+        shutil.copyfile(file, os.path.join(folder, 'nn', str(idx) + '_neural.tif'))
+        os.remove(file)
+
+def transfer_decon_to_folder(folder):
+    files = sorted(glob.glob(folder + '/**/*decon*'))
+    print(files)
+    os.makedirs(os.path.join(folder, 'decon'), exist_ok=True)
+    for idx, file in enumerate(files):
+        shutil.copyfile(file, os.path.join(folder, 'decon', str(idx) + '_decon.tif'))
+        os.remove(file)
+
+
 def main():
     """ Main method calculating a nn stack for a set of old Mito/drp stacks """
+    from Analysis import data_locations
 
-    folder = 'W:/Watchdog/microM_test/201208_cell_Int0s_30pc_488_50pc_561_band_10'
-    target_folder = 'W:/Watchdog/microM_test/201208_cell_Int0s_30pc_488_50pc_561_band_10/timed'
-    stack1, stack2, _ = loadTifFolder(folder)
-    saveTifStack(os.path.join(target_folder, os.path.basename(folder) + '.tiff'), stack1, stack2)
+    # folder = 'W:/Watchdog/microM_test/cell_IntSmart_30pc_488_50pc_561_band_4'
+    # calculateNNforFolder(folder)
+    # transfer_nn_to_folder(folder)
+    # ats_folders = data_locations.caulo_folders['fast']
 
+    ats_folders = data_locations.mito_folders['ats']
+    deconvolveFolder(ats_folders, mode='cuda', subfolder=None)
+
+    # slow_folders = data_locations.mito_folders['fast']
+    # for folder in slow_folders:
+    #     print(folder)
+    #     _, stacks = get_files(folder)
+    #     for stack in stacks:
+    #         deconvoleStack(stack, mode='cuda')
+
+    from toolbox.misc.speak import say_done
+    say_done()
+
+    # ats_folder = 'W:/Watchdog/microM_test/'
+    # ats_samples = ['201208_cell_Int0s_30pc_488_50pc_561_band_4',
+    #                '201208_cell_Int0s_30pc_488_50pc_561_band_5',
+    #                '201208_cell_Int0s_30pc_488_50pc_561_band_6']
+    #                 #'201208_cell_Int0s_30pc_488_50pc_561_band_10']
+    # ats_folders = [ats_folder + sample for sample in ats_samples]
+
+    # target_folder = 'W:/Watchdog/microM_test/201208_cell_Int0s_30pc_488_50pc_561_band_10/timed'
+    # stack1, stack2, _ = loadTifFolder(folder)
+    # saveTifStack(os.path.join(target_folder, os.path.basename(folder) + '.tiff'), stack1, stack2)
 
     # folder = "C:/Users/stepp/Documents/02_Raw/Caulobacter_iSIM/slow/"
     # samples = ["0", "1", "2", "3", "4", "6", "7", "8", "10", "11", "13"]

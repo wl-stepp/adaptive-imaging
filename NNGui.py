@@ -76,9 +76,9 @@ class NNGui(QWidget):
         self.viewerProc.setLUT(self.imageItemDrpProc, 'reds')
         self.viewerProc.setLUT(self.imageItemMitoProc, 'grey')
 
-        self.viewerNN = QtImageViewerMerge()
+        self.viewerNN = QtImageViewerMerge(maxRange=255)
         self.imageItemNN = self.viewerNN.addImage()
-        self.viewerNN.setLUT(self.imageItemNN, 'inferno')
+        self.viewerNN.setLUT(self.imageItemNN, 'viridis')  # was inferno
         self.loadBox = QGroupBox()
 
         # Connect the viewers

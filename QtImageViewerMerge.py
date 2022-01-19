@@ -81,7 +81,7 @@ class QtImageViewerMerge(QMainWindow):  # GraphicsWindow):
     frameChanged = pyqtSignal([], [int])
     resizedEmitter = pyqtSignal([], [int])
 
-    def __init__(self):
+    def __init__(self, maxRange=1):
         QMainWindow.__init__(self)
         self.widget = QWidget()
         self.setCentralWidget(self.widget)
@@ -108,6 +108,7 @@ class QtImageViewerMerge(QMainWindow):  # GraphicsWindow):
         self.gridMenu.addWidget(self.menuButton, 0, 0, Qt.AlignTop)
         self.viewBox.sigRangeChanged.connect(self.rangeChanged)
 
+        self.maxRange = maxRange
         self.zValue = 0
         self.fullImages = []
         self.imageItems = []
@@ -165,7 +166,7 @@ class QtImageViewerMerge(QMainWindow):  # GraphicsWindow):
         """ reset Ranges when a new stack is loaded in by some GUI """
         for pos in range(self.numChannels):
             fullImageRange = [np.min(self.fullImages[pos]), np.max(self.fullImages[pos])]
-            maxImage = np.max([fullImageRange[1], 1])
+            maxImage = np.max([fullImageRange[1], self.maxRange])
             minImage = fullImageRange[0]
             self.saturationSliders[pos].viewBox.setYRange(-0.2*maxImage, maxImage*1.2)
             self.saturationSliders[pos].regions[0].setRegion((-0.1*maxImage, maxImage*1.1))

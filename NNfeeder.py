@@ -9,7 +9,7 @@ Returns:
 import numpy as np
 from skimage import exposure, filters, transform
 
-from SmartMicro.ImageTiles import getTilePositionsV2
+from eda_original.SmartMicro.ImageTiles import getTilePositionsV2
 
 
 def prepareNNImages(bact_img, ftsz_img, model, bacteria=False):
