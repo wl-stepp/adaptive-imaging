@@ -28,8 +28,8 @@ from PyQt5.QtWidgets import (QApplication, QFileDialog, QGridLayout, QGroupBox,
 from skimage import exposure, transform
 from tensorflow import keras
 
-from NNfeeder import prepareNNImages
-from NNio import (dataOrderMetadata, loadTifFolder, loadTifStack,
+from eda_original.SmartMicro.NNfeeder import prepareNNImages
+from eda_original.SmartMicro.NNio import (dataOrderMetadata, loadTifFolder, loadTifStack,
                   loadTifStackElapsed)
 from QtImageViewerMerge import QtImageViewerMerge
 from SatsGUI import SatsGUI

@@ -13,20 +13,13 @@
 			"path": "W:\\Watchdog\\Model"
 		},
 		{
-			"path": "..\\Tinker"
-		},
-		{
-			"path": "..\\..\\02_Raw\\SmartMito"
-		},
-		{
 			"path": "W:\\Watchdog"
 		},
 		{
-			"path": "..\\..\\02_Raw"
-		},
-		{
-			"path": "..\\toolbox"
+			"path": "..\\..\\toolbox"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"python.terminal.activateEnvironment": true
+	}
 }

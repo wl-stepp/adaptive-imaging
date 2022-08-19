@@ -12,7 +12,7 @@ from skimage import exposure, filters, transform
 from eda_original.SmartMicro.ImageTiles import getTilePositionsV2
 
 
-def prepareNNImages(bact_img, ftsz_img, model, bacteria=False):
+def prepareNNImages(bact_img, ftsz_img, model, bacteria=False, out_max=1):
     """Preprocess raw iSIM images before running them throught the neural network.
 
     Args:
@@ -51,7 +51,7 @@ def prepareNNImages(bact_img, ftsz_img, model, bacteria=False):
             positions = getTilePositionsV2(ftsz_img, nnImageSize)
             contrastMax = 255
         else:
-            contrastMax = 1
+            contrastMax = out_max
 
         # Contrast
         ftsz_img = exposure.rescale_intensity(

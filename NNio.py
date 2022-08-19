@@ -9,8 +9,6 @@ import contextlib
 import glob
 import json
 import os
-import pdb
-import pickle
 import re
 import shutil
 import threading
@@ -25,12 +23,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tifffile
 import xmltodict
+from eda_original.SmartMicro import ImageTiles, NNfeeder
 from matplotlib.widgets import RectangleSelector
 from skimage import io
 from toolbox.image_processing import deconvolve
 from tqdm import tqdm
-
-from . import ImageTiles, NNfeeder
 
 
 def loadiSIMmetadata(folder):
@@ -236,7 +233,7 @@ def saveTifStack(target_file, stack1, stack2):
 
 
 def loadTifFolder(folder, resizeParam=1, order=0, progress=None,
-                  cropSquare=True, outputs=None, decon_id:str = 'None') -> np.ndarray:
+                  cropSquare=True, outputs=None, decon_id: str = 'None') -> np.ndarray:
     """Function to load SATS data from a folder with the individual tif files written by
     microManager. Inbetween there might be neural network images that are also loaded into
     an array. Mainly used with NN_GUI_v2.py
@@ -261,7 +258,7 @@ def loadTifFolder(folder, resizeParam=1, order=0, progress=None,
         if decon_id == 'None':
             deconPath = filePath[:-8] + 'decon.tiff'
         else:
-            deconPath = sorted(glob.glob(os.path.join(os.path.dirname(filePath),decon_id)))
+            deconPath = sorted(glob.glob(os.path.join(os.path.dirname(filePath), decon_id)))
             deconPath = deconPath[frame]
 
         try:
@@ -387,6 +384,7 @@ def cropToSquare(stack):
 def loadTifStack(stack, order=None, outputElapsed=False, cropSquare=True, img_range=None):
     """ Load a tif stack and deinterleave depending on the order (0 or 1). Also get the
     elapsed time on the images and give them back as list."""
+    print(stack)
     imageMitoOrig = io.imread(stack, key=img_range)
 
     print(imageMitoOrig.shape)
@@ -612,14 +610,20 @@ def calculateNNforFolder(folder, model=None):
         tifffile.imwrite(nn_file, nnImage.astype(np.uint8))
 
 
-def deconvoleStack(file: str, mode: str = 'cpu'):
+def deconvoleStack(file: str, mode: str = 'cpu', cuda_params=None,  name="", channel="network"):
     """ Deconvolve the struct part of a stack of foci/struct data using the deconvolve function
     in the toolbox."""
-    _, stack_struct = loadTifStack(file)
+    if channel == "network":
+        _, stack_struct = loadTifStack(file)
+    elif channel == "peaks":
+        stack_struct, _ = loadTifStack(file)
     stackDecon = np.zeros(stack_struct.shape, dtype=np.uint16)
     if mode == 'cuda':
         from toolbox.image_processing import cuda_decon
-        cuda_params = cuda_decon.CudaParams()
+    if cuda_params is None:
+        cuda_params = cuda_decon.CudaParams(background=1, sigma=3.04/2.355, after_gaussian=2)
+    print("DECONVOLE STACK")
+    print('sigma: ', cuda_params.kernel['sigma'], '\nbackground: ', cuda_params.background)
 
     for frame in tqdm(range(stack_struct.shape[0])):
         if mode == 'cpu':
@@ -627,20 +631,30 @@ def deconvoleStack(file: str, mode: str = 'cpu'):
         else:
             stackDecon[frame, :, :] = cuda_decon.richardson_lucy(stack_struct[frame, :, :],
                                                                  params=cuda_params)
+        if cuda_params.after_gaussian:
+            stackDecon[frame, :, :] = cv2.GaussianBlur(stackDecon[frame, :, :], (0, 0),
+                                                       cuda_params.after_gaussian)
 
-    out_file = file[:-8] + '_decon.tiff'
+    out_file = file[:-8] + '_decon' + name + '.tiff'
+    print(f"{file} -> {out_file}")
     tifffile.imwrite(out_file, stackDecon)
 
 
-def deconvolveFolder(folder, n_threads=10, mode='cpu', cuda_params=None, subfolder=None):
+def deconvolveFolder(folder, n_threads=10, mode='cpu', cuda_params=None, subfolder=None,
+                     channel='network'):
     """ Wrapper function for deconvolveOneFolder to allow for parallel computation """
 
     if isinstance(folder, list) and mode == 'cpu':
         with Pool(n_threads) as p:
-            p.map(deconvolveOneFolder, folder, subfolder)
+            p.map(deconvolveOneFolder, folder, subfolder, channel)
     elif isinstance(folder, list):
         for single_folder in folder:
-            deconvolveOneFolder(single_folder, mode, cuda_params, subfolder)
+            try:
+                deconvolveOneFolder(single_folder, mode, cuda_params, subfolder, channel)
+            except TypeError:
+                files, _ = get_files(single_folder)
+                print(files['stack'][0])
+                deconvoleStack(files['stack'][0], mode, cuda_params, subfolder[1:-2], channel)
     else:
         deconvolveOneFolder(folder, mode, cuda_params, subfolder)
 
@@ -652,11 +666,12 @@ def deconvolveOneFolder(folder, mode='cpu', cuda_params=None, subfolder=None, ch
         from toolbox.image_processing import cuda_decon
 
     if cuda_params is None and mode == 'cuda':
-        print('Using default coda_params')
-        cuda_params = cuda_decon.CudaParams(background=1.05, sigma=3.9/2.335)  # 0.92 mito 1 for caulo highlight
+        print('Using default cuda_params')
+        # bg 0.92 mito 1 for caulo highlight 1.05 otherwise
+        cuda_params = cuda_decon.CudaParams(background=1, sigma=3.04/2.355, after_gaussian=2)
+        # 3.04 = sqrt(2)*120/56
     print('sigma: ', cuda_params.kernel['sigma'], '\nbackground: ', cuda_params.background)
 
-    print(folder)
     files, _ = get_files(folder)
     files = files[channel]
     for idx, file in enumerate(tqdm(files)):
@@ -872,6 +887,7 @@ def transfer_nn_to_folder(folder):
         shutil.copyfile(file, os.path.join(folder, 'nn', str(idx) + '_neural.tif'))
         os.remove(file)
 
+
 def transfer_decon_to_folder(folder):
     files = sorted(glob.glob(folder + '/**/*decon*'))
     print(files)
@@ -883,15 +899,27 @@ def transfer_decon_to_folder(folder):
 
 def main():
     """ Main method calculating a nn stack for a set of old Mito/drp stacks """
-    from Analysis import data_locations
-
+    from eda_original.Analysis import data_locations
     # folder = 'W:/Watchdog/microM_test/cell_IntSmart_30pc_488_50pc_561_band_4'
     # calculateNNforFolder(folder)
     # transfer_nn_to_folder(folder)
     # ats_folders = data_locations.caulo_folders['fast']
+    from toolbox.image_processing import cuda_decon
+    cuda_params = cuda_decon.CudaParams(background=0.8, sigma=3.9/2.355, after_gaussian=1.5)
+    dataset = data_locations.mito_folders
 
-    ats_folders = data_locations.mito_folders['ats']
-    deconvolveFolder(ats_folders, mode='cuda', subfolder=None)
+    ats_folders = [sorted(dataset['ats'])[1]]
+    # ats_folders.append('C:/Users/stepp/Documents/02_Raw/Caulobacter_iSIM/210506_01')
+    deconvolveFolder(ats_folders, mode='cuda', cuda_params=cuda_params, subfolder='decon_pr',
+                     channel='network')
+
+    # slow_folders = dataset['slow']
+    # deconvolveFolder(slow_folders, mode='cuda',  cuda_params=cuda_params, subfolder='decon_corr3',
+    #                  channel='network')
+
+    # fast_files = [dataset['fast'][2]]
+    # deconvolveFolder(fast_files, mode='cuda',  cuda_params=cuda_params, subfolder='decon_net',
+    # channel='network')
 
     # slow_folders = data_locations.mito_folders['fast']
     # for folder in slow_folders:
